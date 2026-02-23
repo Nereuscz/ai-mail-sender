@@ -228,16 +228,16 @@
         Po roztřídění můžeš každý soubor jedním kliknutím odeslat na faktury.jic@inbox.grit.cz.
       </div>
 
-      <div class="batch-controls">
+      <div id="result" class="result" style="display:none;"></div>
+      <div id="groups" class="groups"></div>
+
+      <div id="batchControls" class="batch-controls" style="display:none;">
         <div>
           <label for="commonSubject">Společný předmět pro vybrané soubory</label>
           <input id="commonSubject" type="text" maxlength="120" placeholder="Např. Faktury únor 2026" />
         </div>
         <button id="sendSelectedBtn" type="button" disabled>Odeslat vybrané na faktury</button>
       </div>
-
-      <div id="result" class="result" style="display:none;"></div>
-      <div id="groups" class="groups"></div>
     </main>
 
     <script>
@@ -251,6 +251,7 @@
       const filesInput = document.getElementById('files');
       const commonSubjectInput = document.getElementById('commonSubject');
       const sendSelectedBtn = document.getElementById('sendSelectedBtn');
+      const batchControls = document.getElementById('batchControls');
       let isLoggedIn = false;
 
       function showResult(text, isError = false) {
@@ -277,6 +278,7 @@
 
       function renderGroups(groups) {
         groupsEl.innerHTML = '';
+        batchControls.style.display = 'none';
         for (const group of groups) {
           const section = document.createElement('section');
           section.className = 'group';
@@ -378,6 +380,9 @@
 
           groupsEl.appendChild(section);
         }
+        if (groups.length > 0) {
+          batchControls.style.display = 'grid';
+        }
         sendSelectedBtn.disabled = !isLoggedIn;
       }
 
@@ -425,6 +430,7 @@
         updateAuthUi({ loggedIn: false });
         groupsEl.innerHTML = '';
         commonSubjectInput.value = '';
+        batchControls.style.display = 'none';
       });
 
       sendSelectedBtn.addEventListener('click', async () => {
@@ -504,6 +510,7 @@
           showResult(`Hotovo. Roztříděno souborů: ${data.total}.`);
         } catch (err) {
           groupsEl.innerHTML = '';
+          batchControls.style.display = 'none';
           showResult(err.message || 'Neočekávaná chyba.', true);
         } finally {
           sortBtn.disabled = !isLoggedIn;
