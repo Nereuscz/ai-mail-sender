@@ -6,13 +6,18 @@
     <title>AI Třídič Faktur</title>
     <style>
       :root {
-        --bg: #f6f8ff;
-        --card: #ffffff;
-        --text: #172033;
-        --muted: #5a6884;
-        --accent: #0d6efd;
-        --ok-bg: #dcfce7;
-        --ok-text: #14532d;
+        --bg: #f2f2f7;
+        --bg-2: #e5e5ea;
+        --card: rgba(255, 255, 255, 0.78);
+        --text: #1d1d1f;
+        --muted: #6e6e73;
+        --line: rgba(60, 60, 67, 0.18);
+        --accent: #0a84ff;
+        --accent-strong: #0071e3;
+        --danger: #ff3b30;
+        --ok-bg: rgba(52, 199, 89, 0.18);
+        --ok-text: #1d7f40;
+        --shadow: 0 20px 45px rgba(0, 0, 0, 0.08);
       }
 
       * { box-sizing: border-box; }
@@ -20,25 +25,31 @@
       body {
         margin: 0;
         min-height: 100vh;
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-        background: radial-gradient(circle at 20% 10%, #dbeafe, var(--bg) 55%);
+        font-family: "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        background:
+          radial-gradient(1200px 500px at -10% -10%, #ffffff, transparent 50%),
+          radial-gradient(900px 380px at 110% 0%, #dce9ff, transparent 48%),
+          linear-gradient(180deg, var(--bg), var(--bg-2));
         color: var(--text);
         display: grid;
         place-items: center;
-        padding: 20px;
+        padding: 28px 16px;
       }
 
       .card {
         width: min(900px, 100%);
         background: var(--card);
-        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.6);
+        border-radius: 24px;
         padding: 24px;
-        box-shadow: 0 15px 40px rgba(23, 32, 51, 0.1);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(18px) saturate(150%);
       }
 
       h1 {
         margin: 0 0 10px;
-        font-size: clamp(1.3rem, 2.8vw, 1.8rem);
+        font-size: clamp(1.35rem, 2.8vw, 1.95rem);
+        letter-spacing: -0.02em;
       }
 
       p {
@@ -56,8 +67,8 @@
 
       .status-pill {
         padding: 8px 10px;
-        border-radius: 10px;
-        background: #e5e7eb;
+        border-radius: 999px;
+        background: rgba(120, 120, 128, 0.16);
         font-size: 0.88rem;
       }
 
@@ -78,37 +89,52 @@
 
       input, button {
         width: 100%;
-        border-radius: 10px;
-        border: 1px solid #c7d2fe;
-        padding: 10px 12px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.75);
+        padding: 12px 14px;
         font: inherit;
+        transition: 180ms ease;
       }
 
       button {
         background: var(--accent);
         color: #fff;
         border: 0;
-        font-weight: 600;
+        font-weight: 590;
         cursor: pointer;
       }
 
       button[disabled] {
-        opacity: 0.6;
+        opacity: 0.55;
         cursor: not-allowed;
+      }
+
+      input:focus {
+        outline: none;
+        border-color: rgba(10, 132, 255, 0.6);
+        box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.15);
+      }
+
+      button:not([disabled]):hover {
+        background: var(--accent-strong);
+        transform: translateY(-1px);
       }
 
       .result {
         margin-top: 16px;
         padding: 12px;
-        border-radius: 10px;
-        background: #eef4ff;
+        border-radius: 14px;
+        background: rgba(10, 132, 255, 0.1);
+        border: 1px solid rgba(10, 132, 255, 0.15);
         white-space: pre-wrap;
         font-size: 0.92rem;
       }
 
       .error {
-        background: #fee2e2;
-        color: #7f1d1d;
+        background: rgba(255, 59, 48, 0.12);
+        border-color: rgba(255, 59, 48, 0.3);
+        color: #8a1c16;
       }
 
       .groups {
@@ -129,10 +155,10 @@
       }
 
       .group {
-        border: 1px solid #dbe3ff;
-        border-radius: 12px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
         padding: 12px;
-        background: #f9fbff;
+        background: rgba(255, 255, 255, 0.6);
       }
 
       .group h3 {
@@ -144,7 +170,7 @@
         gap: 8px;
         grid-template-columns: auto 1fr auto;
         align-items: center;
-        border-top: 1px solid #e7ecff;
+        border-top: 1px solid rgba(60, 60, 67, 0.12);
         padding: 10px 0;
       }
 
@@ -178,10 +204,10 @@
       }
 
       .subject-btn {
-        border: 1px solid #93c5fd;
-        background: #eff6ff;
-        color: #1d4ed8;
-        border-radius: 10px;
+        border: 1px solid rgba(10, 132, 255, 0.3);
+        background: rgba(10, 132, 255, 0.12);
+        color: #0a4c8a;
+        border-radius: 12px;
         padding: 8px 12px;
         font-size: 0.88rem;
         width: auto;
@@ -189,19 +215,19 @@
 
       .send-btn {
         border: 0;
-        background: #2563eb;
+        background: var(--accent);
         color: #fff;
-        border-radius: 10px;
+        border-radius: 12px;
         padding: 8px 12px;
         font-size: 0.88rem;
         width: auto;
       }
 
       .remove-btn {
-        border: 1px solid #fca5a5;
-        background: #fef2f2;
-        color: #b91c1c;
-        border-radius: 10px;
+        border: 1px solid rgba(255, 59, 48, 0.35);
+        background: rgba(255, 59, 48, 0.1);
+        color: #a32018;
+        border-radius: 12px;
         padding: 8px 12px;
         font-size: 0.88rem;
         width: auto;
