@@ -574,6 +574,43 @@ app.post('/api/send-batch', async (req, res) => {
   }
 });
 
+app.post('/api/remove-batch', (req, res) => {
+  try {
+    if (!req.session?.auth?.userEmail) {
+      return res.status(401).json({ error: 'Nejdřív se přihlas přes Microsoft.' });
+    }
+
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
+    if (ids.length === 0) {
+      return res.status(400).json({ error: 'Vyber aspoň jeden soubor k odebrání.' });
+    }
+
+    const records = Array.isArray(req.session.sortedInvoices) ? req.session.sortedInvoices : [];
+    const idSet = new Set(ids);
+    const remaining = records.filter((item) => !idSet.has(item.id));
+    const removed = records.length - remaining.length;
+    req.session.sortedInvoices = remaining;
+
+    const groups = buildGroupedResponse(remaining.map((r) => ({
+      id: r.id,
+      filename: r.filename,
+      company: r.company,
+      subject: r.subject,
+      size: r.size,
+    })));
+
+    return res.json({
+      ok: true,
+      removed,
+      total: remaining.length,
+      groups,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: error.message || 'Neočekávaná chyba.' });
+  }
+});
+
 app.post('/api/subject/:id', async (req, res) => {
   try {
     if (!req.session?.auth?.userEmail) {

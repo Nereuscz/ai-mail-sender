@@ -123,6 +123,11 @@
         gap: 10px;
       }
 
+      .batch-actions {
+        display: flex;
+        gap: 10px;
+      }
+
       .group {
         border: 1px solid #dbe3ff;
         border-radius: 12px;
@@ -192,6 +197,16 @@
         width: auto;
       }
 
+      .remove-btn {
+        border: 1px solid #fca5a5;
+        background: #fef2f2;
+        color: #b91c1c;
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-size: 0.88rem;
+        width: auto;
+      }
+
       .muted {
         color: var(--muted);
         font-size: 0.9rem;
@@ -200,6 +215,10 @@
       @media (max-width: 640px) {
         .item {
           grid-template-columns: auto 1fr;
+        }
+
+        .batch-actions {
+          flex-direction: column;
         }
       }
     </style>
@@ -236,7 +255,10 @@
           <label for="commonSubject">Společný předmět pro vybrané soubory</label>
           <input id="commonSubject" type="text" maxlength="120" placeholder="Např. Faktury únor 2026" />
         </div>
-        <button id="sendSelectedBtn" type="button" disabled>Odeslat vybrané na faktury</button>
+        <div class="batch-actions">
+          <button id="sendSelectedBtn" type="button" disabled>Odeslat vybrané na faktury</button>
+          <button id="removeSelectedBtn" class="remove-btn" type="button" disabled>Odebrat vybrané</button>
+        </div>
       </div>
     </main>
 
@@ -251,6 +273,7 @@
       const filesInput = document.getElementById('files');
       const commonSubjectInput = document.getElementById('commonSubject');
       const sendSelectedBtn = document.getElementById('sendSelectedBtn');
+      const removeSelectedBtn = document.getElementById('removeSelectedBtn');
       const batchControls = document.getElementById('batchControls');
       let isLoggedIn = false;
 
@@ -384,6 +407,7 @@
           batchControls.style.display = 'grid';
         }
         sendSelectedBtn.disabled = !isLoggedIn;
+        removeSelectedBtn.disabled = !isLoggedIn;
       }
 
       function selectedFileIds() {
@@ -409,6 +433,7 @@
           logoutBtn.style.display = 'none';
         }
         sendSelectedBtn.disabled = !isLoggedIn;
+        removeSelectedBtn.disabled = !isLoggedIn;
       }
 
       async function loadAuthStatus() {
@@ -431,6 +456,42 @@
         groupsEl.innerHTML = '';
         commonSubjectInput.value = '';
         batchControls.style.display = 'none';
+      });
+
+      removeSelectedBtn.addEventListener('click', async () => {
+        if (!isLoggedIn) {
+          showResult('Nejdřív se přihlas přes Microsoft.', true);
+          return;
+        }
+
+        const ids = selectedFileIds();
+        if (ids.length === 0) {
+          showResult('Vyber aspoň jeden soubor k odebrání.', true);
+          return;
+        }
+
+        const original = removeSelectedBtn.textContent;
+        removeSelectedBtn.disabled = true;
+        removeSelectedBtn.textContent = 'Odebírám...';
+
+        try {
+          const response = await fetch('/api/remove-batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids }),
+          });
+          const data = await parseApiResponse(response);
+          if (!response.ok) {
+            throw new Error(data.error || 'Odebrání selhalo');
+          }
+          renderGroups(data.groups || []);
+          showResult(`Odebráno: ${data.removed}. Celkem v seznamu: ${data.total}.`);
+        } catch (err) {
+          showResult(err.message || 'Neočekávaná chyba při odebírání.', true);
+        } finally {
+          removeSelectedBtn.disabled = !isLoggedIn;
+          removeSelectedBtn.textContent = original;
+        }
       });
 
       sendSelectedBtn.addEventListener('click', async () => {
