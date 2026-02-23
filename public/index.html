@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Email Sender</title>
+    <style>
+      :root {
+        --bg: #f6f8ff;
+        --card: #ffffff;
+        --text: #172033;
+        --muted: #5a6884;
+        --accent: #0d6efd;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: radial-gradient(circle at 20% 10%, #dbeafe, var(--bg) 55%);
+        color: var(--text);
+        display: grid;
+        place-items: center;
+        padding: 20px;
+      }
+
+      .card {
+        width: min(680px, 100%);
+        background: var(--card);
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 15px 40px rgba(23, 32, 51, 0.1);
+      }
+
+      h1 {
+        margin: 0 0 10px;
+        font-size: clamp(1.3rem, 2.8vw, 1.8rem);
+      }
+
+      p {
+        margin: 0 0 20px;
+        color: var(--muted);
+      }
+
+      form {
+        display: grid;
+        gap: 14px;
+      }
+
+      label {
+        font-size: 0.9rem;
+        font-weight: 600;
+      }
+
+      input, textarea, button {
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid #c7d2fe;
+        padding: 10px 12px;
+        font: inherit;
+      }
+
+      textarea { min-height: 90px; resize: vertical; }
+
+      button {
+        background: var(--accent);
+        color: #fff;
+        border: 0;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      button[disabled] { opacity: 0.6; cursor: not-allowed; }
+
+      .result {
+        margin-top: 16px;
+        padding: 12px;
+        border-radius: 10px;
+        background: #eef4ff;
+        white-space: pre-wrap;
+        font-size: 0.92rem;
+      }
+
+      .error { background: #fee2e2; color: #7f1d1d; }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <h1>AI Email Sender</h1>
+      <p>Nahraj PDF/obrázek, AI vytvoří předmět + tělo a email se odešle s přílohou.</p>
+
+      <form id="mail-form">
+        <div>
+          <label for="targetEmail">Cílový email</label>
+          <input id="targetEmail" name="targetEmail" type="email" required placeholder="cil@firma.cz" />
+        </div>
+
+        <div>
+          <label for="file">Příloha (PDF nebo obrázek)</label>
+          <input id="file" name="file" type="file" accept="application/pdf,image/*" required />
+        </div>
+
+        <div>
+          <label for="note">Volitelná poznámka pro AI</label>
+          <textarea id="note" name="note" placeholder="Např. zvýrazni částku a datum splatnosti."></textarea>
+        </div>
+
+        <button id="submitBtn" type="submit">Zpracovat a odeslat</button>
+      </form>
+
+      <div id="result" class="result" style="display:none;"></div>
+    </main>
+
+    <script>
+      const form = document.getElementById('mail-form');
+      const result = document.getElementById('result');
+      const submitBtn = document.getElementById('submitBtn');
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        result.style.display = 'none';
+        result.classList.remove('error');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Odesílám...';
+
+        try {
+          const formData = new FormData(form);
+          const response = await fetch('/api/send', {
+            method: 'POST',
+            body: formData,
+          });
+
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.error || 'Chyba při odesílání');
+          }
+
+          result.textContent = [
+            'Email byl úspěšně odeslán.',
+            `Message ID: ${data.messageId}`,
+            `Předmět: ${data.subject}`,
+            '',
+            'Náhled těla:',
+            data.previewBody,
+          ].join('\n');
+        } catch (err) {
+          result.textContent = err.message;
+          result.classList.add('error');
+        } finally {
+          result.style.display = 'block';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Zpracovat a odeslat';
+        }
+      });
+    </script>
+  </body>
+</html>
