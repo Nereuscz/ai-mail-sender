@@ -1,10 +1,10 @@
-# AI Třídič Faktur (PDF/Obrázky -> AI Třídění -> Stažení)
+# AI Třídič Faktur (PDF/Obrázky -> AI Třídění -> Odeslání)
 
 Jednoduchá webová aplikace:
 - nahraješ jednu nebo více příloh (PDF/obrázky),
 - AI je roztřídí podle firmy,
 - AI navrhne předmět pro každý soubor,
-- každý soubor stáhneš jedním kliknutím.
+- každý soubor odešleš jedním kliknutím na `faktury.jic@inbox.grit.cz`.
 
 ## 1) Instalace
 
@@ -15,7 +15,7 @@ npm install
 ## 2) Nastavení Entra aplikace
 
 V Entra app registration nastav:
-- `Microsoft Graph` delegovaná oprávnění: `User.Read`
+- `Microsoft Graph` delegovaná oprávnění: `User.Read`, `Mail.Send`
 - Redirect URI (Web):
   - `https://ai-mail-sender-production.up.railway.app/auth/redirect`
 
@@ -49,7 +49,7 @@ Otevři: `http://localhost:3000`
 2. Přihlaš se firemním účtem.
 3. Nahraj více faktur (PDF/obrázky).
 4. Klikni `Roztřídit faktury`.
-5. U každého souboru použij `Stáhnout soubor`.
+5. U každého souboru použij `Odeslat na faktury`.
 
 ## Railway
 

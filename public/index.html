@@ -76,7 +76,7 @@
         font-weight: 600;
       }
 
-      input, button, a.button-link {
+      input, button {
         width: 100%;
         border-radius: 10px;
         border: 1px solid #c7d2fe;
@@ -152,14 +152,14 @@
         font-size: 0.9rem;
       }
 
-      .download-btn {
-        display: inline-block;
-        text-decoration: none;
+      .send-btn {
+        border: 0;
         background: #2563eb;
         color: #fff;
         border-radius: 10px;
         padding: 8px 12px;
         font-size: 0.88rem;
+        width: auto;
       }
 
       .muted {
@@ -195,7 +195,7 @@
       </form>
 
       <div class="muted" style="margin-top:10px;">
-        Po roztřídění můžeš každý soubor stáhnout jedním kliknutím.
+        Po roztřídění můžeš každý soubor jedním kliknutím odeslat na faktury.jic@inbox.grit.cz.
       </div>
 
       <div id="result" class="result" style="display:none;"></div>
@@ -261,13 +261,33 @@
             meta.appendChild(fileName);
             meta.appendChild(subject);
 
-            const download = document.createElement('a');
-            download.className = 'download-btn';
-            download.href = `/api/download/${encodeURIComponent(file.id)}`;
-            download.textContent = 'Stáhnout soubor';
+            const sendBtn = document.createElement('button');
+            sendBtn.type = 'button';
+            sendBtn.className = 'send-btn';
+            sendBtn.textContent = 'Odeslat na faktury';
+            sendBtn.addEventListener('click', async () => {
+              const original = sendBtn.textContent;
+              sendBtn.disabled = true;
+              sendBtn.textContent = 'Odesílám...';
+              try {
+                const response = await fetch(`/api/send/${encodeURIComponent(file.id)}`, {
+                  method: 'POST',
+                });
+                const data = await parseApiResponse(response);
+                if (!response.ok) {
+                  throw new Error(data.error || 'Odeslání selhalo');
+                }
+                showResult(`Odesláno: ${data.filename} -> ${data.to}\\nPředmět: ${data.subject}`);
+              } catch (err) {
+                showResult(err.message || 'Neočekávaná chyba při odeslání.', true);
+              } finally {
+                sendBtn.disabled = false;
+                sendBtn.textContent = original;
+              }
+            });
 
             row.appendChild(meta);
-            row.appendChild(download);
+            row.appendChild(sendBtn);
             section.appendChild(row);
           }
 

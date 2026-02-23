@@ -12,6 +12,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 const PORT = process.env.PORT || 3000;
 const MAX_FILE_SIZE_MB = Number(process.env.MAX_FILE_SIZE_MB || 20);
 const MAX_FILES = Number(process.env.MAX_FILES || 10);
+const FIXED_TARGET_EMAIL = 'faktury.jic@inbox.grit.cz';
 
 function getMissingConfig() {
   const required = [
@@ -34,7 +35,7 @@ function getAuthBaseUrl() {
 }
 
 function getAuthScopes() {
-  return 'offline_access openid profile email User.Read';
+  return 'offline_access openid profile email User.Read Mail.Send';
 }
 
 function getState() {
@@ -136,6 +137,56 @@ async function fetchGraphMe(accessToken) {
   return data;
 }
 
+async function refreshAccessToken(refreshToken) {
+  const body = new URLSearchParams({
+    client_id: process.env.MS_CLIENT_ID,
+    client_secret: process.env.MS_CLIENT_SECRET,
+    grant_type: 'refresh_token',
+    refresh_token: refreshToken,
+    redirect_uri: process.env.MS_REDIRECT_URI,
+    scope: getAuthScopes(),
+  });
+
+  const response = await fetch(`${getAuthBaseUrl()}/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error_description || data.error || 'Token refresh failed');
+  }
+
+  return data;
+}
+
+async function getValidAccessToken(req) {
+  const auth = req.session?.auth;
+  if (!auth?.accessToken || !auth?.expiresAt) {
+    throw new Error('Nejsi přihlášený přes Microsoft.');
+  }
+
+  const now = Date.now();
+  if (now < auth.expiresAt - 60_000) {
+    return auth.accessToken;
+  }
+
+  if (!auth.refreshToken) {
+    throw new Error('Přihlášení vypršelo, přihlas se znovu.');
+  }
+
+  const refreshed = await refreshAccessToken(auth.refreshToken);
+  req.session.auth = {
+    ...auth,
+    accessToken: refreshed.access_token,
+    refreshToken: refreshed.refresh_token || auth.refreshToken,
+    expiresAt: Date.now() + Number(refreshed.expires_in || 3600) * 1000,
+  };
+
+  return req.session.auth.accessToken;
+}
+
 function normalizeInvoiceItems(aiItems, files) {
   const byIndex = new Map();
   const byFilename = new Map();
@@ -207,6 +258,48 @@ function buildGroupedResponse(items) {
     .map(([company, files]) => ({ company, files }));
 }
 
+async function sendInvoiceViaGraph(accessToken, record) {
+  const payload = {
+    message: {
+      subject: String(record.subject || '').slice(0, 120) || `Faktura: ${record.filename}`,
+      body: {
+        contentType: 'Text',
+        content: 'Automaticky odesláno z AI Třídiče faktur.',
+      },
+      toRecipients: [
+        {
+          emailAddress: {
+            address: FIXED_TARGET_EMAIL,
+          },
+        },
+      ],
+      attachments: [
+        {
+          '@odata.type': '#microsoft.graph.fileAttachment',
+          name: record.filename,
+          contentType: record.mimetype || 'application/octet-stream',
+          contentBytes: record.contentBase64,
+        },
+      ],
+    },
+    saveToSentItems: true,
+  };
+
+  const response = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Odeslání selhalo: ${text}`);
+  }
+}
+
 app.set('trust proxy', 1);
 app.use(express.json());
 app.use(session({
@@ -262,6 +355,9 @@ app.get('/auth/redirect', async (req, res) => {
     req.session.auth = {
       userEmail: me.mail || me.userPrincipalName || 'unknown',
       userName: me.displayName || '',
+      accessToken: tokenSet.access_token,
+      refreshToken: tokenSet.refresh_token,
+      expiresAt: Date.now() + Number(tokenSet.expires_in || 3600) * 1000,
       loginAt: Date.now(),
     };
 
@@ -280,7 +376,7 @@ app.post('/auth/logout', (req, res) => {
 
 app.get('/api/auth-status', (req, res) => {
   const auth = req.session.auth;
-  if (!auth?.userEmail) {
+  if (!auth?.userEmail || !auth?.accessToken) {
     return res.json({ loggedIn: false });
   }
 
@@ -337,19 +433,30 @@ app.post('/api/sort', upload.array('files', MAX_FILES), async (req, res) => {
   }
 });
 
-app.get('/api/download/:id', (req, res) => {
-  const fileId = String(req.params.id || '');
-  const records = req.session?.sortedInvoices || [];
-  const record = records.find((item) => item.id === fileId);
+app.post('/api/send/:id', async (req, res) => {
+  try {
+    const fileId = String(req.params.id || '');
+    const records = req.session?.sortedInvoices || [];
+    const record = records.find((item) => item.id === fileId);
 
-  if (!record) {
-    return res.status(404).json({ error: 'Soubor nebyl nalezen. Nahraj a roztřiď faktury znovu.' });
+    if (!record) {
+      return res.status(404).json({ error: 'Soubor nebyl nalezen. Nahraj a roztřiď faktury znovu.' });
+    }
+
+    const accessToken = await getValidAccessToken(req);
+    await sendInvoiceViaGraph(accessToken, record);
+
+    return res.json({
+      ok: true,
+      to: FIXED_TARGET_EMAIL,
+      filename: record.filename,
+      subject: record.subject,
+    });
+  } catch (error) {
+    console.error(error);
+    const status = String(error.message || '').includes('Nejsi přihlášený') ? 401 : 500;
+    return res.status(status).json({ error: error.message || 'Neočekávaná chyba.' });
   }
-
-  const buffer = Buffer.from(record.contentBase64, 'base64');
-  res.setHeader('Content-Type', record.mimetype);
-  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(record.filename)}"`);
-  return res.send(buffer);
 });
 
 app.use((err, _req, res, _next) => {
