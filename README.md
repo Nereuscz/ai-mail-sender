@@ -1,12 +1,10 @@
-# AI Email Sender (PDF/Image -> AI Subject -> Microsoft Send)
+# AI Třídič Faktur (PDF/Obrázky -> AI Třídění -> Stažení)
 
 Jednoduchá webová aplikace:
 - nahraješ jednu nebo více příloh (PDF/obrázky),
-- AI vytáhne informace,
-- AI po nahrání přílohy předvyplní `subject` (můžeš ho upravit),
-- AI vytvoří tělo e-mailu,
-- e-mail se odešle z tvého Microsoft 365 účtu přes Graph API.
-- cílová adresa je pevně `faktury.jic@inbox.grit.cz`.
+- AI je roztřídí podle firmy,
+- AI navrhne předmět pro každý soubor,
+- každý soubor stáhneš jedním kliknutím.
 
 ## 1) Instalace
 
@@ -17,7 +15,7 @@ npm install
 ## 2) Nastavení Entra aplikace
 
 V Entra app registration nastav:
-- `Microsoft Graph` delegovaná oprávnění: `Mail.Send`, `User.Read`
+- `Microsoft Graph` delegovaná oprávnění: `User.Read`
 - Redirect URI (Web):
   - `https://ai-mail-sender-production.up.railway.app/auth/redirect`
 
@@ -49,8 +47,9 @@ Otevři: `http://localhost:3000`
 
 1. Klikni `Přihlásit Microsoft`.
 2. Přihlaš se firemním účtem.
-3. Nahraj PDF/obrázek a zadej cílový e-mail.
-4. Odešli.
+3. Nahraj více faktur (PDF/obrázky).
+4. Klikni `Roztřídit faktury`.
+5. U každého souboru použij `Stáhnout soubor`.
 
 ## Railway
 

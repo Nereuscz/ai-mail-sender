@@ -11,7 +11,6 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 const PORT = process.env.PORT || 3000;
 const MAX_FILE_SIZE_MB = Number(process.env.MAX_FILE_SIZE_MB || 20);
-const FIXED_TARGET_EMAIL = 'faktury.jic@inbox.grit.cz';
 const MAX_FILES = Number(process.env.MAX_FILES || 10);
 
 function getMissingConfig() {
@@ -35,98 +34,22 @@ function getAuthBaseUrl() {
 }
 
 function getAuthScopes() {
-  return 'offline_access openid profile email User.Read Mail.Send';
+  return 'offline_access openid profile email User.Read';
 }
 
 function getState() {
   return crypto.randomBytes(24).toString('hex');
 }
 
-async function exchangeCodeForToken(code) {
-  const body = new URLSearchParams({
-    client_id: process.env.MS_CLIENT_ID,
-    client_secret: process.env.MS_CLIENT_SECRET,
-    grant_type: 'authorization_code',
-    code,
-    redirect_uri: process.env.MS_REDIRECT_URI,
-    scope: getAuthScopes(),
-  });
-
-  const response = await fetch(`${getAuthBaseUrl()}/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  });
-
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error_description || data.error || 'OAuth token exchange failed');
+function parseJsonResponse(raw) {
+  const text = String(raw || '').trim();
+  if (!text) {
+    throw new Error('AI vrátila prázdnou odpověď.');
   }
 
-  return data;
-}
-
-async function refreshAccessToken(refreshToken) {
-  const body = new URLSearchParams({
-    client_id: process.env.MS_CLIENT_ID,
-    client_secret: process.env.MS_CLIENT_SECRET,
-    grant_type: 'refresh_token',
-    refresh_token: refreshToken,
-    redirect_uri: process.env.MS_REDIRECT_URI,
-    scope: getAuthScopes(),
-  });
-
-  const response = await fetch(`${getAuthBaseUrl()}/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  });
-
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error_description || data.error || 'Token refresh failed');
-  }
-
-  return data;
-}
-
-async function fetchGraphMe(accessToken) {
-  const response = await fetch('https://graph.microsoft.com/v1.0/me', {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error?.message || 'Graph /me failed');
-  }
-
-  return data;
-}
-
-async function getValidAccessToken(req) {
-  const auth = req.session?.auth;
-  if (!auth || !auth.accessToken || !auth.expiresAt) {
-    throw new Error('Nejsi přihlášený přes Microsoft.');
-  }
-
-  const now = Date.now();
-  if (now < auth.expiresAt - 60_000) {
-    return auth.accessToken;
-  }
-
-  if (!auth.refreshToken) {
-    throw new Error('Session vypršela, přihlas se znovu.');
-  }
-
-  const refreshed = await refreshAccessToken(auth.refreshToken);
-  req.session.auth = {
-    ...auth,
-    accessToken: refreshed.access_token,
-    refreshToken: refreshed.refresh_token || auth.refreshToken,
-    expiresAt: Date.now() + Number(refreshed.expires_in || 3600) * 1000,
-  };
-
-  return req.session.auth.accessToken;
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced ? fenced[1].trim() : text;
+  return JSON.parse(candidate);
 }
 
 function toDataUrl(file) {
@@ -161,7 +84,7 @@ function buildOpenAiInputFromFiles(files, instructions) {
 
 function validateFiles(files) {
   if (!files || files.length === 0) {
-    throw new Error('Chybí příloha (PDF nebo obrázek).');
+    throw new Error('Chybí přílohy (PDF nebo obrázky).');
   }
 
   if (files.length > MAX_FILES) {
@@ -176,82 +99,112 @@ function validateFiles(files) {
   }
 }
 
-async function generateSubjectAndBodyFromFiles(files, targetEmail) {
+async function exchangeCodeForToken(code) {
+  const body = new URLSearchParams({
+    client_id: process.env.MS_CLIENT_ID,
+    client_secret: process.env.MS_CLIENT_SECRET,
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: process.env.MS_REDIRECT_URI,
+    scope: getAuthScopes(),
+  });
+
+  const response = await fetch(`${getAuthBaseUrl()}/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error_description || data.error || 'OAuth token exchange failed');
+  }
+
+  return data;
+}
+
+async function fetchGraphMe(accessToken) {
+  const response = await fetch('https://graph.microsoft.com/v1.0/me', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error?.message || 'Graph /me failed');
+  }
+
+  return data;
+}
+
+function normalizeInvoiceItems(aiItems, files) {
+  const byIndex = new Map();
+  const byFilename = new Map();
+
+  for (const item of aiItems || []) {
+    const idx = Number(item?.index);
+    if (Number.isInteger(idx) && idx >= 0) {
+      byIndex.set(idx, item);
+    }
+
+    const name = String(item?.filename || '').trim();
+    if (name) {
+      byFilename.set(name.toLowerCase(), item);
+    }
+  }
+
+  return files.map((file, index) => {
+    const item = byIndex.get(index) || byFilename.get(file.originalname.toLowerCase()) || {};
+    const companyRaw = String(item.company || item.vendor || '').trim();
+    const subjectRaw = String(item.subject || '').trim();
+
+    return {
+      index,
+      filename: file.originalname,
+      company: companyRaw || 'Neurčeno',
+      subject: subjectRaw || `Faktura: ${file.originalname}`,
+    };
+  });
+}
+
+async function classifyInvoices(files) {
   const openai = getOpenAiClient();
+  const fileLines = files.map((file, index) => `${index}: ${file.originalname}`).join('\n');
 
   const instructions = [
-    'Jsi asistent pro zpracování dokumentů.',
-    'Ze vstupního dokumentu vytáhni hlavní informace a navrhni krátký, profesionální email.',
-    `Cílový email je: ${targetEmail}`,
+    'Jsi asistent pro třídění faktur.',
+    'Pro KAŽDÝ soubor urči firmu (vendor/company) a navrhni stručný předmět emailu.',
+    'Nevymýšlej detailní text emailu, pouze subject.',
     'Vrať POUZE JSON bez markdownu v tomto tvaru:',
-    '{"subject":"...","body":"..."}',
-    'Předmět max 80 znaků. Tělo emailu v češtině, 4-10 řádků.',
-  ].filter(Boolean).join('\n');
+    '{"items":[{"index":0,"filename":"soubor.pdf","company":"Firma","subject":"Faktura Firma ..."}]}',
+    'Pokud firmu nepoznáš, použij company "Neurčeno".',
+    'Subjekt max 120 znaků, česky.',
+    'Seznam souborů dle indexu:',
+    fileLines,
+  ].join('\n');
 
   const inputContent = buildOpenAiInputFromFiles(files, instructions);
-
   const response = await openai.responses.create({
     model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
     input: [{ role: 'user', content: inputContent }],
-    temperature: 0.2,
+    temperature: 0.1,
   });
 
-  const raw = response.output_text || '';
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error(`AI response is not valid JSON: ${raw}`);
-  }
-
-  if (!parsed.subject || !parsed.body) {
-    throw new Error(`AI response missing subject/body: ${raw}`);
-  }
-
-  return {
-    subject: String(parsed.subject).slice(0, 120),
-    body: String(parsed.body),
-  };
+  const parsed = parseJsonResponse(response.output_text || '');
+  return normalizeInvoiceItems(parsed.items, files);
 }
 
-async function sendMailViaGraph(accessToken, targetEmail, subject, body, files) {
-  const payload = {
-    message: {
-      subject,
-      body: {
-        contentType: 'Text',
-        content: body,
-      },
-      toRecipients: [
-        {
-          emailAddress: {
-            address: targetEmail,
-          },
-        },
-      ],
-      attachments: files.map((file) => ({
-        '@odata.type': '#microsoft.graph.fileAttachment',
-        name: file.originalname,
-        contentType: file.mimetype || 'application/octet-stream',
-        contentBytes: file.buffer.toString('base64'),
-      })),
-    },
-    saveToSentItems: true,
-  };
-
-  const response = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Graph sendMail failed: ${text}`);
+function buildGroupedResponse(items) {
+  const groupsMap = new Map();
+  for (const item of items) {
+    if (!groupsMap.has(item.company)) {
+      groupsMap.set(item.company, []);
+    }
+    groupsMap.get(item.company).push(item);
   }
+
+  return [...groupsMap.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], 'cs'))
+    .map(([company, files]) => ({ company, files }));
 }
 
 app.set('trust proxy', 1);
@@ -307,11 +260,9 @@ app.get('/auth/redirect', async (req, res) => {
     const me = await fetchGraphMe(tokenSet.access_token);
 
     req.session.auth = {
-      accessToken: tokenSet.access_token,
-      refreshToken: tokenSet.refresh_token,
-      expiresAt: Date.now() + Number(tokenSet.expires_in || 3600) * 1000,
       userEmail: me.mail || me.userPrincipalName || 'unknown',
       userName: me.displayName || '',
+      loginAt: Date.now(),
     };
 
     res.redirect('/?login=ok');
@@ -329,20 +280,20 @@ app.post('/auth/logout', (req, res) => {
 
 app.get('/api/auth-status', (req, res) => {
   const auth = req.session.auth;
-  if (!auth?.accessToken) {
+  if (!auth?.userEmail) {
     return res.json({ loggedIn: false });
   }
 
-  res.json({
+  return res.json({
     loggedIn: true,
     userEmail: auth.userEmail,
     userName: auth.userName,
   });
 });
 
-app.post('/api/draft', upload.array('files', MAX_FILES), async (req, res) => {
+app.post('/api/sort', upload.array('files', MAX_FILES), async (req, res) => {
   try {
-    if (!req.session?.auth?.accessToken) {
+    if (!req.session?.auth?.userEmail) {
       return res.status(401).json({ error: 'Nejdřív se přihlas přes Microsoft.' });
     }
 
@@ -352,51 +303,53 @@ app.post('/api/draft', upload.array('files', MAX_FILES), async (req, res) => {
 
     const files = req.files || [];
     validateFiles(files);
-    const { subject, body } = await generateSubjectAndBodyFromFiles(files, FIXED_TARGET_EMAIL);
-    res.json({
+
+    const aiItems = await classifyInvoices(files);
+    const records = aiItems.map((item, index) => ({
+      id: crypto.randomUUID(),
+      index,
+      filename: item.filename,
+      company: item.company,
+      subject: item.subject,
+      mimetype: files[index].mimetype || 'application/octet-stream',
+      contentBase64: files[index].buffer.toString('base64'),
+      size: files[index].size,
+    }));
+
+    req.session.sortedInvoices = records;
+
+    const groups = buildGroupedResponse(records.map((r) => ({
+      id: r.id,
+      filename: r.filename,
+      company: r.company,
+      subject: r.subject,
+      size: r.size,
+    })));
+
+    return res.json({
       ok: true,
-      subject,
-      previewBody: body,
+      total: records.length,
+      groups,
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: error.message || 'Neočekávaná chyba.' });
+    return res.status(500).json({ error: error.message || 'Neočekávaná chyba.' });
   }
 });
 
-app.post('/api/send', upload.array('files', MAX_FILES), async (req, res) => {
-  try {
-    const missing = getMissingConfig();
-    if (missing.length > 0) {
-      return res.status(500).json({
-        error: `Chybí konfigurace v .env: ${missing.join(', ')}`,
-      });
-    }
+app.get('/api/download/:id', (req, res) => {
+  const fileId = String(req.params.id || '');
+  const records = req.session?.sortedInvoices || [];
+  const record = records.find((item) => item.id === fileId);
 
-    const { subject: subjectInput } = req.body;
-    const files = req.files || [];
-    validateFiles(files);
-
-    const targetEmail = FIXED_TARGET_EMAIL;
-    const accessToken = await getValidAccessToken(req);
-    const aiDraft = await generateSubjectAndBodyFromFiles(files, targetEmail);
-    const manualSubject = String(subjectInput || '').trim();
-    const subject = (manualSubject || aiDraft.subject).slice(0, 120);
-    const body = aiDraft.body;
-    await sendMailViaGraph(accessToken, targetEmail, subject, body, files);
-
-    res.json({
-      ok: true,
-      subject,
-      previewBody: body,
-      from: req.session.auth.userEmail,
-      to: targetEmail,
-    });
-  } catch (error) {
-    console.error(error);
-    const status = String(error.message || '').includes('Nejsi přihlášený') ? 401 : 500;
-    res.status(status).json({ error: error.message || 'Neočekávaná chyba.' });
+  if (!record) {
+    return res.status(404).json({ error: 'Soubor nebyl nalezen. Nahraj a roztřiď faktury znovu.' });
   }
+
+  const buffer = Buffer.from(record.contentBase64, 'base64');
+  res.setHeader('Content-Type', record.mimetype);
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(record.filename)}"`);
+  return res.send(buffer);
 });
 
 app.get('/health', (_req, res) => {

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Email Sender</title>
+    <title>AI Třídič Faktur</title>
     <style>
       :root {
         --bg: #f6f8ff;
@@ -29,7 +29,7 @@
       }
 
       .card {
-        width: min(700px, 100%);
+        width: min(900px, 100%);
         background: var(--card);
         border-radius: 16px;
         padding: 24px;
@@ -76,7 +76,7 @@
         font-weight: 600;
       }
 
-      input, button {
+      input, button, a.button-link {
         width: 100%;
         border-radius: 10px;
         border: 1px solid #c7d2fe;
@@ -92,7 +92,10 @@
         cursor: pointer;
       }
 
-      button[disabled] { opacity: 0.6; cursor: not-allowed; }
+      button[disabled] {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
 
       .result {
         margin-top: 16px;
@@ -103,18 +106,78 @@
         font-size: 0.92rem;
       }
 
-      .error { background: #fee2e2; color: #7f1d1d; }
+      .error {
+        background: #fee2e2;
+        color: #7f1d1d;
+      }
+
+      .groups {
+        margin-top: 18px;
+        display: grid;
+        gap: 14px;
+      }
+
+      .group {
+        border: 1px solid #dbe3ff;
+        border-radius: 12px;
+        padding: 12px;
+        background: #f9fbff;
+      }
+
+      .group h3 {
+        margin: 0 0 10px;
+      }
+
+      .item {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        border-top: 1px solid #e7ecff;
+        padding: 10px 0;
+      }
+
+      .item:first-of-type {
+        border-top: 0;
+        padding-top: 0;
+      }
+
+      .file-name {
+        font-weight: 600;
+        font-size: 0.95rem;
+      }
+
+      .subject {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .download-btn {
+        display: inline-block;
+        text-decoration: none;
+        background: #2563eb;
+        color: #fff;
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-size: 0.88rem;
+      }
 
       .muted {
         color: var(--muted);
         font-size: 0.9rem;
       }
+
+      @media (max-width: 640px) {
+        .item {
+          grid-template-columns: 1fr;
+        }
+      }
     </style>
   </head>
   <body>
     <main class="card">
-      <h1>AI Email Sender</h1>
-      <p>Nahraj PDF/obrázek, AI vytvoří předmět + tělo a email se odešle z tvého Microsoft účtu.</p>
+      <h1>AI Třídič Faktur</h1>
+      <p>Nahraj více faktur. AI je roztřídí podle firmy a navrhne předmět pro každý soubor.</p>
 
       <div class="auth-row">
         <button id="loginBtn" type="button">Přihlásit Microsoft</button>
@@ -122,44 +185,33 @@
         <span id="authStatus" class="status-pill">Neověřeno</span>
       </div>
 
-      <form id="mail-form">
+      <form id="sort-form">
         <div>
-          <label>Cílový email</label>
-          <input type="text" value="faktury.jic@inbox.grit.cz" disabled />
-        </div>
-
-        <div>
-          <label for="subject">Předmět (volitelně)</label>
-          <input id="subject" name="subject" type="text" maxlength="120" placeholder="Když nevyplníš, navrhne ho AI." />
-        </div>
-
-        <div>
-          <label for="files">Přílohy (PDF nebo obrázky)</label>
+          <label for="files">Faktury (PDF nebo obrázky)</label>
           <input id="files" name="files" type="file" accept="application/pdf,image/*" multiple required />
         </div>
 
-        <button id="submitBtn" type="submit">Zpracovat a odeslat</button>
+        <button id="sortBtn" type="submit">Roztřídit faktury</button>
       </form>
 
       <div class="muted" style="margin-top:10px;">
-        Nejdřív se přihlas přes Microsoft. Email pak odejde z tvé přihlášené schránky.
+        Po roztřídění můžeš každý soubor stáhnout jedním kliknutím.
       </div>
 
       <div id="result" class="result" style="display:none;"></div>
+      <div id="groups" class="groups"></div>
     </main>
 
     <script>
-      const form = document.getElementById('mail-form');
+      const form = document.getElementById('sort-form');
       const result = document.getElementById('result');
-      const submitBtn = document.getElementById('submitBtn');
+      const groupsEl = document.getElementById('groups');
+      const sortBtn = document.getElementById('sortBtn');
       const loginBtn = document.getElementById('loginBtn');
       const logoutBtn = document.getElementById('logoutBtn');
       const authStatus = document.getElementById('authStatus');
-      const fileInput = document.getElementById('files');
-      const subjectInput = document.getElementById('subject');
+      const filesInput = document.getElementById('files');
       let isLoggedIn = false;
-      let subjectTouchedByUser = false;
-      let draftReqCounter = 0;
 
       function showResult(text, isError = false) {
         result.textContent = text;
@@ -167,9 +219,49 @@
         result.classList.toggle('error', isError);
       }
 
+      function renderGroups(groups) {
+        groupsEl.innerHTML = '';
+        for (const group of groups) {
+          const section = document.createElement('section');
+          section.className = 'group';
+
+          const heading = document.createElement('h3');
+          heading.textContent = group.company;
+          section.appendChild(heading);
+
+          for (const file of group.files) {
+            const row = document.createElement('div');
+            row.className = 'item';
+
+            const meta = document.createElement('div');
+            const fileName = document.createElement('div');
+            fileName.className = 'file-name';
+            fileName.textContent = file.filename;
+
+            const subject = document.createElement('div');
+            subject.className = 'subject';
+            subject.textContent = `Předmět: ${file.subject}`;
+
+            meta.appendChild(fileName);
+            meta.appendChild(subject);
+
+            const download = document.createElement('a');
+            download.className = 'download-btn';
+            download.href = `/api/download/${encodeURIComponent(file.id)}`;
+            download.textContent = 'Stáhnout soubor';
+
+            row.appendChild(meta);
+            row.appendChild(download);
+            section.appendChild(row);
+          }
+
+          groupsEl.appendChild(section);
+        }
+      }
+
       function updateAuthUi(status) {
         isLoggedIn = !!status.loggedIn;
-        submitBtn.disabled = !isLoggedIn;
+        sortBtn.disabled = !isLoggedIn;
 
         if (isLoggedIn) {
           const label = status.userEmail ? `Přihlášen: ${status.userEmail}` : 'Přihlášen';
@@ -202,57 +294,7 @@
       logoutBtn.addEventListener('click', async () => {
         await fetch('/auth/logout', { method: 'POST' });
         updateAuthUi({ loggedIn: false });
-      });
-
-      subjectInput.addEventListener('input', () => {
-        subjectTouchedByUser = subjectInput.value.trim().length > 0;
-      });
-
-      async function suggestSubjectFromAttachment() {
-        const files = Array.from(fileInput.files || []);
-        if (files.length === 0 || !isLoggedIn) {
-          return;
-        }
-
-        const requestId = ++draftReqCounter;
-        const previousPlaceholder = subjectInput.placeholder;
-        subjectInput.placeholder = 'AI navrhuje předmět...';
-
-        try {
-          const formData = new FormData();
-          for (const file of files) {
-            formData.append('files', file);
-          }
-
-          const response = await fetch('/api/draft', {
-            method: 'POST',
-            body: formData,
-          });
-
-          const data = await response.json();
-          if (!response.ok) {
-            throw new Error(data.error || 'Nepodařilo se navrhnout předmět.');
-          }
-
-          if (requestId !== draftReqCounter) {
-            return;
-          }
-
-          if (!subjectTouchedByUser || !subjectInput.value.trim()) {
-            subjectInput.value = data.subject || '';
-          }
-        } catch (err) {
-          showResult(err.message || 'Chyba při návrhu předmětu.', true);
-        } finally {
-          subjectInput.placeholder = previousPlaceholder;
-        }
-      }
-
-      fileInput.addEventListener('change', () => {
-        if (!subjectInput.value.trim()) {
-          subjectTouchedByUser = false;
-        }
-        suggestSubjectFromAttachment();
+        groupsEl.innerHTML = '';
       });
 
       form.addEventListener('submit', async (e) => {
@@ -265,35 +307,39 @@
           return;
         }
 
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Odesílám...';
+        const files = filesInput.files ? Array.from(filesInput.files) : [];
+        if (files.length === 0) {
+          showResult('Vyber aspoň jeden soubor.', true);
+          return;
+        }
+
+        sortBtn.disabled = true;
+        sortBtn.textContent = 'Třídím...';
 
         try {
-          const formData = new FormData(form);
-          const response = await fetch('/api/send', {
+          const formData = new FormData();
+          for (const file of files) {
+            formData.append('files', file);
+          }
+
+          const response = await fetch('/api/sort', {
             method: 'POST',
             body: formData,
           });
 
           const data = await response.json();
           if (!response.ok) {
-            throw new Error(data.error || 'Chyba při odesílání');
+            throw new Error(data.error || 'Chyba při třídění');
           }
 
-          showResult([
-            'Email byl úspěšně odeslán.',
-            `Odesláno z: ${data.from || '-'}`,
-            `Odesláno na: ${data.to || 'faktury.jic@inbox.grit.cz'}`,
-            `Předmět: ${data.subject}`,
-            '',
-            'Náhled těla:',
-            data.previewBody,
-          ].join('\n'));
+          renderGroups(data.groups || []);
+          showResult(`Hotovo. Roztříděno souborů: ${data.total}.`);
         } catch (err) {
+          groupsEl.innerHTML = '';
           showResult(err.message || 'Neočekávaná chyba.', true);
         } finally {
-          submitBtn.disabled = !isLoggedIn;
-          submitBtn.textContent = 'Zpracovat a odeslat';
+          sortBtn.disabled = !isLoggedIn;
+          sortBtn.textContent = 'Roztřídit faktury';
         }
       });
 
