@@ -1,7 +1,7 @@
 # AI Email Sender (PDF/Image -> AI Subject -> Microsoft Send)
 
 Jednoduchá webová aplikace:
-- nahraješ PDF nebo obrázek,
+- nahraješ jednu nebo více příloh (PDF/obrázky),
 - AI vytáhne informace,
 - AI po nahrání přílohy předvyplní `subject` (můžeš ho upravit),
 - AI vytvoří tělo e-mailu,

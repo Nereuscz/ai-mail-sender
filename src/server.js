@@ -12,6 +12,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 const PORT = process.env.PORT || 3000;
 const MAX_FILE_SIZE_MB = Number(process.env.MAX_FILE_SIZE_MB || 20);
 const FIXED_TARGET_EMAIL = 'faktury.jic@inbox.grit.cz';
+const MAX_FILES = Number(process.env.MAX_FILES || 10);
 
 function getMissingConfig() {
   const required = [
@@ -134,10 +135,49 @@ function toDataUrl(file) {
   return `data:${mime};base64,${b64}`;
 }
 
-async function generateSubjectAndBodyFromFile(file, targetEmail) {
+function buildOpenAiInputFromFiles(files, instructions) {
+  const content = [{ type: 'input_text', text: instructions }];
+
+  for (const file of files) {
+    const mime = file.mimetype || '';
+    const isPdf = mime.includes('pdf') || file.originalname.toLowerCase().endsWith('.pdf');
+    if (isPdf) {
+      content.push({
+        type: 'input_file',
+        filename: file.originalname,
+        file_data: toDataUrl(file),
+      });
+      continue;
+    }
+
+    content.push({
+      type: 'input_image',
+      image_url: toDataUrl(file),
+    });
+  }
+
+  return content;
+}
+
+function validateFiles(files) {
+  if (!files || files.length === 0) {
+    throw new Error('Chybí příloha (PDF nebo obrázek).');
+  }
+
+  if (files.length > MAX_FILES) {
+    throw new Error(`Moc příloh. Maximum je ${MAX_FILES}.`);
+  }
+
+  for (const file of files) {
+    const fileSizeMb = file.size / (1024 * 1024);
+    if (fileSizeMb > MAX_FILE_SIZE_MB) {
+      throw new Error(`Soubor ${file.originalname} je příliš velký. Max je ${MAX_FILE_SIZE_MB} MB.`);
+    }
+  }
+}
+
+async function generateSubjectAndBodyFromFiles(files, targetEmail) {
   const openai = getOpenAiClient();
-  const mime = file.mimetype || '';
-  const isPdf = mime.includes('pdf') || file.originalname.toLowerCase().endsWith('.pdf');
 
   const instructions = [
     'Jsi asistent pro zpracování dokumentů.',
@@ -148,25 +188,7 @@ async function generateSubjectAndBodyFromFile(file, targetEmail) {
     'Předmět max 80 znaků. Tělo emailu v češtině, 4-10 řádků.',
   ].filter(Boolean).join('\n');
 
-  let inputContent;
-  if (isPdf) {
-    inputContent = [
-      { type: 'input_text', text: instructions },
-      {
-        type: 'input_file',
-        filename: file.originalname,
-        file_data: toDataUrl(file),
-      },
-    ];
-  } else {
-    inputContent = [
-      { type: 'input_text', text: instructions },
-      {
-        type: 'input_image',
-        image_url: toDataUrl(file),
-      },
-    ];
-  }
+  const inputContent = buildOpenAiInputFromFiles(files, instructions);
 
   const response = await openai.responses.create({
     model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
@@ -192,7 +214,7 @@ async function generateSubjectAndBodyFromFile(file, targetEmail) {
   };
 }
 
-async function sendMailViaGraph(accessToken, targetEmail, subject, body, file) {
+async function sendMailViaGraph(accessToken, targetEmail, subject, body, files) {
   const payload = {
     message: {
       subject,
@@ -207,14 +229,12 @@ async function sendMailViaGraph(accessToken, targetEmail, subject, body, file) {
           },
         },
       ],
-      attachments: [
-        {
-          '@odata.type': '#microsoft.graph.fileAttachment',
-          name: file.originalname,
-          contentType: file.mimetype || 'application/octet-stream',
-          contentBytes: file.buffer.toString('base64'),
-        },
-      ],
+      attachments: files.map((file) => ({
+        '@odata.type': '#microsoft.graph.fileAttachment',
+        name: file.originalname,
+        contentType: file.mimetype || 'application/octet-stream',
+        contentBytes: file.buffer.toString('base64'),
+      })),
     },
     saveToSentItems: true,
   };
@@ -320,7 +340,7 @@ app.get('/api/auth-status', (req, res) => {
   });
 });
 
-app.post('/api/draft', upload.single('file'), async (req, res) => {
+app.post('/api/draft', upload.array('files', MAX_FILES), async (req, res) => {
   try {
     if (!req.session?.auth?.accessToken) {
       return res.status(401).json({ error: 'Nejdřív se přihlas přes Microsoft.' });
@@ -330,19 +350,9 @@ app.post('/api/draft', upload.single('file'), async (req, res) => {
       return res.status(500).json({ error: 'Chybí konfigurace v .env: OPENAI_API_KEY' });
     }
 
-    const file = req.file;
-    if (!file) {
-      return res.status(400).json({ error: 'Chybí příloha (PDF nebo obrázek).' });
-    }
-
-    const fileSizeMb = file.size / (1024 * 1024);
-    if (fileSizeMb > MAX_FILE_SIZE_MB) {
-      return res.status(400).json({
-        error: `Soubor je příliš velký. Max je ${MAX_FILE_SIZE_MB} MB.`,
-      });
-    }
-
-    const { subject, body } = await generateSubjectAndBodyFromFile(file, FIXED_TARGET_EMAIL);
+    const files = req.files || [];
+    validateFiles(files);
+    const { subject, body } = await generateSubjectAndBodyFromFiles(files, FIXED_TARGET_EMAIL);
     res.json({
       ok: true,
       subject,
@@ -354,7 +364,7 @@ app.post('/api/draft', upload.single('file'), async (req, res) => {
   }
 });
 
-app.post('/api/send', upload.single('file'), async (req, res) => {
+app.post('/api/send', upload.array('files', MAX_FILES), async (req, res) => {
   try {
     const missing = getMissingConfig();
     if (missing.length > 0) {
@@ -364,26 +374,16 @@ app.post('/api/send', upload.single('file'), async (req, res) => {
     }
 
     const { subject: subjectInput } = req.body;
-    const file = req.file;
-
-    if (!file) {
-      return res.status(400).json({ error: 'Chybí příloha (PDF nebo obrázek).' });
-    }
-
-    const fileSizeMb = file.size / (1024 * 1024);
-    if (fileSizeMb > MAX_FILE_SIZE_MB) {
-      return res.status(400).json({
-        error: `Soubor je příliš velký. Max je ${MAX_FILE_SIZE_MB} MB.`,
-      });
-    }
+    const files = req.files || [];
+    validateFiles(files);
 
     const targetEmail = FIXED_TARGET_EMAIL;
     const accessToken = await getValidAccessToken(req);
-    const aiDraft = await generateSubjectAndBodyFromFile(file, targetEmail);
+    const aiDraft = await generateSubjectAndBodyFromFiles(files, targetEmail);
     const manualSubject = String(subjectInput || '').trim();
     const subject = (manualSubject || aiDraft.subject).slice(0, 120);
     const body = aiDraft.body;
-    await sendMailViaGraph(accessToken, targetEmail, subject, body, file);
+    await sendMailViaGraph(accessToken, targetEmail, subject, body, files);
 
     res.json({
       ok: true,

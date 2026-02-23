@@ -134,8 +134,8 @@
         </div>
 
         <div>
-          <label for="file">Příloha (PDF nebo obrázek)</label>
-          <input id="file" name="file" type="file" accept="application/pdf,image/*" required />
+          <label for="files">Přílohy (PDF nebo obrázky)</label>
+          <input id="files" name="files" type="file" accept="application/pdf,image/*" multiple required />
         </div>
 
         <button id="submitBtn" type="submit">Zpracovat a odeslat</button>
@@ -155,7 +155,7 @@
       const loginBtn = document.getElementById('loginBtn');
       const logoutBtn = document.getElementById('logoutBtn');
       const authStatus = document.getElementById('authStatus');
-      const fileInput = document.getElementById('file');
+      const fileInput = document.getElementById('files');
       const subjectInput = document.getElementById('subject');
       let isLoggedIn = false;
       let subjectTouchedByUser = false;
@@ -209,8 +209,8 @@
       });
 
       async function suggestSubjectFromAttachment() {
-        const file = fileInput.files && fileInput.files[0];
-        if (!file || !isLoggedIn) {
+        const files = Array.from(fileInput.files || []);
+        if (files.length === 0 || !isLoggedIn) {
           return;
         }
 
@@ -220,7 +220,9 @@
 
         try {
           const formData = new FormData();
-          formData.append('file', file);
+          for (const file of files) {
+            formData.append('files', file);
+          }
 
           const response = await fetch('/api/draft', {
             method: 'POST',
