@@ -352,6 +352,19 @@ app.get('/api/download/:id', (req, res) => {
   return res.send(buffer);
 });
 
+app.use((err, _req, res, _next) => {
+  console.error(err);
+
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({ error: `Moc příloh. Maximum je ${MAX_FILES}.` });
+    }
+    return res.status(400).json({ error: `Chyba uploadu: ${err.message}` });
+  }
+
+  return res.status(500).json({ error: err.message || 'Neočekávaná chyba.' });
+});
+
 app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
