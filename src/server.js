@@ -321,6 +321,41 @@ app.get('/api/auth-status', (req, res) => {
   });
 });
 
+app.post('/api/draft', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.session?.auth?.accessToken) {
+      return res.status(401).json({ error: 'Nejdřív se přihlas přes Microsoft.' });
+    }
+
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(500).json({ error: 'Chybí konfigurace v .env: OPENAI_API_KEY' });
+    }
+
+    const { note } = req.body;
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ error: 'Chybí příloha (PDF nebo obrázek).' });
+    }
+
+    const fileSizeMb = file.size / (1024 * 1024);
+    if (fileSizeMb > MAX_FILE_SIZE_MB) {
+      return res.status(400).json({
+        error: `Soubor je příliš velký. Max je ${MAX_FILE_SIZE_MB} MB.`,
+      });
+    }
+
+    const { subject, body } = await generateSubjectAndBodyFromFile(file, FIXED_TARGET_EMAIL, note);
+    res.json({
+      ok: true,
+      subject,
+      previewBody: body,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message || 'Neočekávaná chyba.' });
+  }
+});
+
 app.post('/api/send', upload.single('file'), async (req, res) => {
   try {
     const missing = getMissingConfig();

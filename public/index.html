@@ -162,7 +162,12 @@
       const loginBtn = document.getElementById('loginBtn');
       const logoutBtn = document.getElementById('logoutBtn');
       const authStatus = document.getElementById('authStatus');
+      const fileInput = document.getElementById('file');
+      const noteInput = document.getElementById('note');
+      const subjectInput = document.getElementById('subject');
       let isLoggedIn = false;
+      let subjectTouchedByUser = false;
+      let draftReqCounter = 0;
 
       function showResult(text, isError = false) {
         result.textContent = text;
@@ -205,6 +210,60 @@
       logoutBtn.addEventListener('click', async () => {
         await fetch('/auth/logout', { method: 'POST' });
         updateAuthUi({ loggedIn: false });
+      });
+
+      subjectInput.addEventListener('input', () => {
+        subjectTouchedByUser = subjectInput.value.trim().length > 0;
+      });
+
+      async function suggestSubjectFromAttachment() {
+        const file = fileInput.files && fileInput.files[0];
+        if (!file || !isLoggedIn) {
+          return;
+        }
+
+        const requestId = ++draftReqCounter;
+        const previousPlaceholder = subjectInput.placeholder;
+        subjectInput.placeholder = 'AI navrhuje předmět...';
+
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('note', noteInput.value || '');
+
+          const response = await fetch('/api/draft', {
+            method: 'POST',
+            body: formData,
+          });
+
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.error || 'Nepodařilo se navrhnout předmět.');
+          }
+
+          if (requestId !== draftReqCounter) {
+            return;
+          }
+
+          if (!subjectTouchedByUser || !subjectInput.value.trim()) {
+            subjectInput.value = data.subject || '';
+          }
+        } catch (err) {
+          showResult(err.message || 'Chyba při návrhu předmětu.', true);
+        } finally {
+          subjectInput.placeholder = previousPlaceholder;
+        }
+      }
+
+      fileInput.addEventListener('change', () => {
+        if (!subjectInput.value.trim()) {
+          subjectTouchedByUser = false;
+        }
+        suggestSubjectFromAttachment();
+      });
+
+      noteInput.addEventListener('change', () => {
+        suggestSubjectFromAttachment();
       });
 
       form.addEventListener('submit', async (e) => {

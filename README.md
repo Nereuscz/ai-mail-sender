@@ -3,7 +3,8 @@
 Jednoduchá webová aplikace:
 - nahraješ PDF nebo obrázek,
 - AI vytáhne informace,
-- AI vytvoří `subject` + tělo e-mailu,
+- AI po nahrání přílohy předvyplní `subject` (můžeš ho upravit),
+- AI vytvoří tělo e-mailu,
 - e-mail se odešle z tvého Microsoft 365 účtu přes Graph API.
 - cílová adresa je pevně `faktury.jic@inbox.grit.cz`.
 
