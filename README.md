@@ -5,6 +5,7 @@ Jednoduchá webová aplikace:
 - AI vytáhne informace,
 - AI vytvoří `subject` + tělo e-mailu,
 - e-mail se odešle z tvého Microsoft 365 účtu přes Graph API.
+- cílová adresa je pevně `faktury.jic@inbox.grit.cz`.
 
 ## 1) Instalace
 

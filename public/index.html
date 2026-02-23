@@ -126,8 +126,13 @@
 
       <form id="mail-form">
         <div>
-          <label for="targetEmail">Cílový email</label>
-          <input id="targetEmail" name="targetEmail" type="email" required placeholder="cil@firma.cz" />
+          <label>Cílový email</label>
+          <input type="text" value="faktury.jic@inbox.grit.cz" disabled />
+        </div>
+
+        <div>
+          <label for="subject">Předmět (volitelně)</label>
+          <input id="subject" name="subject" type="text" maxlength="120" placeholder="Když nevyplníš, navrhne ho AI." />
         </div>
 
         <div>
@@ -230,6 +235,7 @@
           showResult([
             'Email byl úspěšně odeslán.',
             `Odesláno z: ${data.from || '-'}`,
+            `Odesláno na: ${data.to || 'faktury.jic@inbox.grit.cz'}`,
             `Předmět: ${data.subject}`,
             '',
             'Náhled těla:',

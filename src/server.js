@@ -11,6 +11,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 const PORT = process.env.PORT || 3000;
 const MAX_FILE_SIZE_MB = Number(process.env.MAX_FILE_SIZE_MB || 20);
+const FIXED_TARGET_EMAIL = 'faktury.jic@inbox.grit.cz';
 
 function getMissingConfig() {
   const required = [
@@ -329,12 +330,8 @@ app.post('/api/send', upload.single('file'), async (req, res) => {
       });
     }
 
-    const { targetEmail, note } = req.body;
+    const { note, subject: subjectInput } = req.body;
     const file = req.file;
-
-    if (!targetEmail) {
-      return res.status(400).json({ error: 'Chybí cílový email.' });
-    }
 
     if (!file) {
       return res.status(400).json({ error: 'Chybí příloha (PDF nebo obrázek).' });
@@ -347,8 +344,12 @@ app.post('/api/send', upload.single('file'), async (req, res) => {
       });
     }
 
+    const targetEmail = FIXED_TARGET_EMAIL;
     const accessToken = await getValidAccessToken(req);
-    const { subject, body } = await generateSubjectAndBodyFromFile(file, targetEmail, note);
+    const aiDraft = await generateSubjectAndBodyFromFile(file, targetEmail, note);
+    const manualSubject = String(subjectInput || '').trim();
+    const subject = (manualSubject || aiDraft.subject).slice(0, 120);
+    const body = aiDraft.body;
     await sendMailViaGraph(accessToken, targetEmail, subject, body, file);
 
     res.json({
@@ -356,6 +357,7 @@ app.post('/api/send', upload.single('file'), async (req, res) => {
       subject,
       previewBody: body,
       from: req.session.auth.userEmail,
+      to: targetEmail,
     });
   } catch (error) {
     console.error(error);
