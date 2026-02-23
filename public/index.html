@@ -76,15 +76,13 @@
         font-weight: 600;
       }
 
-      input, textarea, button {
+      input, button {
         width: 100%;
         border-radius: 10px;
         border: 1px solid #c7d2fe;
         padding: 10px 12px;
         font: inherit;
       }
-
-      textarea { min-height: 90px; resize: vertical; }
 
       button {
         background: var(--accent);
@@ -140,11 +138,6 @@
           <input id="file" name="file" type="file" accept="application/pdf,image/*" required />
         </div>
 
-        <div>
-          <label for="note">Volitelná poznámka pro AI</label>
-          <textarea id="note" name="note" placeholder="Např. zvýrazni částku a datum splatnosti."></textarea>
-        </div>
-
         <button id="submitBtn" type="submit">Zpracovat a odeslat</button>
       </form>
 
@@ -163,7 +156,6 @@
       const logoutBtn = document.getElementById('logoutBtn');
       const authStatus = document.getElementById('authStatus');
       const fileInput = document.getElementById('file');
-      const noteInput = document.getElementById('note');
       const subjectInput = document.getElementById('subject');
       let isLoggedIn = false;
       let subjectTouchedByUser = false;
@@ -229,7 +221,6 @@
         try {
           const formData = new FormData();
           formData.append('file', file);
-          formData.append('note', noteInput.value || '');
 
           const response = await fetch('/api/draft', {
             method: 'POST',
@@ -259,10 +250,6 @@
         if (!subjectInput.value.trim()) {
           subjectTouchedByUser = false;
         }
-        suggestSubjectFromAttachment();
-      });
-
-      noteInput.addEventListener('change', () => {
         suggestSubjectFromAttachment();
       });
 

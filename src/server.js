@@ -134,7 +134,7 @@ function toDataUrl(file) {
   return `data:${mime};base64,${b64}`;
 }
 
-async function generateSubjectAndBodyFromFile(file, targetEmail, note) {
+async function generateSubjectAndBodyFromFile(file, targetEmail) {
   const openai = getOpenAiClient();
   const mime = file.mimetype || '';
   const isPdf = mime.includes('pdf') || file.originalname.toLowerCase().endsWith('.pdf');
@@ -143,7 +143,6 @@ async function generateSubjectAndBodyFromFile(file, targetEmail, note) {
     'Jsi asistent pro zpracování dokumentů.',
     'Ze vstupního dokumentu vytáhni hlavní informace a navrhni krátký, profesionální email.',
     `Cílový email je: ${targetEmail}`,
-    note ? `Poznámka od uživatele: ${note}` : '',
     'Vrať POUZE JSON bez markdownu v tomto tvaru:',
     '{"subject":"...","body":"..."}',
     'Předmět max 80 znaků. Tělo emailu v češtině, 4-10 řádků.',
@@ -331,7 +330,6 @@ app.post('/api/draft', upload.single('file'), async (req, res) => {
       return res.status(500).json({ error: 'Chybí konfigurace v .env: OPENAI_API_KEY' });
     }
 
-    const { note } = req.body;
     const file = req.file;
     if (!file) {
       return res.status(400).json({ error: 'Chybí příloha (PDF nebo obrázek).' });
@@ -344,7 +342,7 @@ app.post('/api/draft', upload.single('file'), async (req, res) => {
       });
     }
 
-    const { subject, body } = await generateSubjectAndBodyFromFile(file, FIXED_TARGET_EMAIL, note);
+    const { subject, body } = await generateSubjectAndBodyFromFile(file, FIXED_TARGET_EMAIL);
     res.json({
       ok: true,
       subject,
@@ -365,7 +363,7 @@ app.post('/api/send', upload.single('file'), async (req, res) => {
       });
     }
 
-    const { note, subject: subjectInput } = req.body;
+    const { subject: subjectInput } = req.body;
     const file = req.file;
 
     if (!file) {
@@ -381,7 +379,7 @@ app.post('/api/send', upload.single('file'), async (req, res) => {
 
     const targetEmail = FIXED_TARGET_EMAIL;
     const accessToken = await getValidAccessToken(req);
-    const aiDraft = await generateSubjectAndBodyFromFile(file, targetEmail, note);
+    const aiDraft = await generateSubjectAndBodyFromFile(file, targetEmail);
     const manualSubject = String(subjectInput || '').trim();
     const subject = (manualSubject || aiDraft.subject).slice(0, 120);
     const body = aiDraft.body;
