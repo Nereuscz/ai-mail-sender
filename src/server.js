@@ -478,7 +478,7 @@ app.post('/api/sort', upload.array('files', MAX_FILES), async (req, res) => {
     validateFiles(files);
 
     const aiItems = await classifyInvoices(files);
-    const records = aiItems.map((item, index) => ({
+    const newRecords = aiItems.map((item, index) => ({
       id: crypto.randomUUID(),
       index,
       filename: item.filename,
@@ -489,6 +489,8 @@ app.post('/api/sort', upload.array('files', MAX_FILES), async (req, res) => {
       size: files[index].size,
     }));
 
+    const existing = Array.isArray(req.session.sortedInvoices) ? req.session.sortedInvoices : [];
+    const records = [...existing, ...newRecords];
     req.session.sortedInvoices = records;
 
     const groups = buildGroupedResponse(records.map((r) => ({
@@ -501,6 +503,7 @@ app.post('/api/sort', upload.array('files', MAX_FILES), async (req, res) => {
 
     return res.json({
       ok: true,
+      added: newRecords.length,
       total: records.length,
       groups,
     });

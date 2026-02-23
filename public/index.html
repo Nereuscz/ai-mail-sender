@@ -221,11 +221,11 @@
           <input id="files" name="files" type="file" accept="application/pdf,image/*" multiple required />
         </div>
 
-        <button id="sortBtn" type="submit">Roztřídit faktury</button>
+        <button id="sortBtn" type="submit">Přidat a roztřídit faktury</button>
       </form>
 
       <div class="muted" style="margin-top:10px;">
-        Po roztřídění můžeš každý soubor jedním kliknutím odeslat na faktury.jic@inbox.grit.cz.
+        Nové nahrané soubory se přidají k těm stávajícím. Po roztřídění můžeš každý soubor odeslat na faktury.jic@inbox.grit.cz.
       </div>
 
       <div id="result" class="result" style="display:none;"></div>
@@ -507,14 +507,14 @@
           }
 
           renderGroups(data.groups || []);
-          showResult(`Hotovo. Roztříděno souborů: ${data.total}.`);
+          showResult(`Hotovo. Přidáno: ${data.added ?? 0}. Celkem v seznamu: ${data.total}.`);
         } catch (err) {
           groupsEl.innerHTML = '';
           batchControls.style.display = 'none';
           showResult(err.message || 'Neočekávaná chyba.', true);
         } finally {
           sortBtn.disabled = !isLoggedIn;
-          sortBtn.textContent = 'Roztřídit faktury';
+          sortBtn.textContent = 'Přidat a roztřídit faktury';
         }
       });
 
