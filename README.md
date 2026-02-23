@@ -1,10 +1,10 @@
-# AI Email Sender (PDF/Image -> AI Subject -> Send)
+# AI Email Sender (PDF/Image -> AI Subject -> Microsoft Send)
 
 Jednoduchá webová aplikace:
 - nahraješ PDF nebo obrázek,
 - AI vytáhne informace,
 - AI vytvoří `subject` + tělo e-mailu,
-- appka odešle e-mail s původní přílohou.
+- e-mail se odešle z tvého Microsoft 365 účtu přes Graph API.
 
 ## 1) Instalace
 
@@ -12,23 +12,30 @@ Jednoduchá webová aplikace:
 npm install
 ```
 
-## 2) Konfigurace
+## 2) Nastavení Entra aplikace
 
-1. Zkopíruj env:
+V Entra app registration nastav:
+- `Microsoft Graph` delegovaná oprávnění: `Mail.Send`, `User.Read`
+- Redirect URI (Web):
+  - `https://ai-mail-sender-production.up.railway.app/auth/redirect`
+
+Vygeneruj `Client Secret` a ulož jeho `Value`.
+
+## 3) Konfigurace
+
 ```bash
 cp .env.example .env
 ```
-2. Vyplň `.env`:
-- `OPENAI_API_KEY` (OpenAI API klíč)
-- SMTP údaje (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`)
 
-### Gmail
-- `SMTP_HOST=smtp.gmail.com`
-- `SMTP_PORT=465`
-- `SMTP_USER=tvuj.email@gmail.com`
-- `SMTP_PASS` musí být **App Password** (ne běžné heslo).
+Doplň v `.env`:
+- `OPENAI_API_KEY`
+- `MS_TENANT_ID`
+- `MS_CLIENT_ID`
+- `MS_CLIENT_SECRET`
+- `MS_REDIRECT_URI`
+- `SESSION_SECRET`
 
-## 3) Spuštění
+## 4) Spuštění
 
 ```bash
 npm start
@@ -36,8 +43,13 @@ npm start
 
 Otevři: `http://localhost:3000`
 
-## Bezpečnostní poznámky
+## 5) Použití
 
-- API klíč i SMTP heslo drž pouze v `.env`.
-- Nedávej `.env` do Gitu.
-- Ve výchozím stavu může uživatel zadat libovolný cílový e-mail. Pokud chceš fixní adresu, uprav backend tak, aby `to` bral z env.
+1. Klikni `Přihlásit Microsoft`.
+2. Přihlaš se firemním účtem.
+3. Nahraj PDF/obrázek a zadej cílový e-mail.
+4. Odešli.
+
+## Railway
+
+Nastav stejné proměnné jako v `.env` do Railway Variables a nasazení poběží na veřejné URL.
