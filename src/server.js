@@ -258,6 +258,38 @@ function buildGroupedResponse(items) {
     .map(([company, files]) => ({ company, files }));
 }
 
+async function generateSubjectForSingleFile(record) {
+  const openai = getOpenAiClient();
+  const pseudoFile = {
+    originalname: record.filename,
+    mimetype: record.mimetype,
+    buffer: Buffer.from(record.contentBase64, 'base64'),
+  };
+
+  const instructions = [
+    'Jsi asistent pro zpracování faktur.',
+    'Z tohoto jednoho souboru navrhni pouze stručný předmět emailu v češtině.',
+    'Předmět max 120 znaků.',
+    'Vrať POUZE JSON bez markdownu v tomto tvaru:',
+    '{"subject":"..."}',
+  ].join('\n');
+
+  const inputContent = buildOpenAiInputFromFiles([pseudoFile], instructions);
+  const response = await openai.responses.create({
+    model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+    input: [{ role: 'user', content: inputContent }],
+    temperature: 0.2,
+  });
+
+  const parsed = parseJsonResponse(response.output_text || '');
+  const subject = String(parsed.subject || '').trim();
+  if (!subject) {
+    throw new Error('AI nevrátila předmět.');
+  }
+
+  return subject.slice(0, 120);
+}
+
 async function sendInvoiceViaGraph(accessToken, record) {
   const payload = {
     message: {
@@ -443,6 +475,11 @@ app.post('/api/send/:id', async (req, res) => {
       return res.status(404).json({ error: 'Soubor nebyl nalezen. Nahraj a roztřiď faktury znovu.' });
     }
 
+    const customSubject = String(req.body?.subject || '').trim();
+    if (customSubject) {
+      record.subject = customSubject.slice(0, 120);
+    }
+
     const accessToken = await getValidAccessToken(req);
     await sendInvoiceViaGraph(accessToken, record);
 
@@ -456,6 +493,29 @@ app.post('/api/send/:id', async (req, res) => {
     console.error(error);
     const status = String(error.message || '').includes('Nejsi přihlášený') ? 401 : 500;
     return res.status(status).json({ error: error.message || 'Neočekávaná chyba.' });
+  }
+});
+
+app.post('/api/subject/:id', async (req, res) => {
+  try {
+    if (!req.session?.auth?.userEmail) {
+      return res.status(401).json({ error: 'Nejdřív se přihlas přes Microsoft.' });
+    }
+
+    const fileId = String(req.params.id || '');
+    const records = req.session?.sortedInvoices || [];
+    const record = records.find((item) => item.id === fileId);
+
+    if (!record) {
+      return res.status(404).json({ error: 'Soubor nebyl nalezen. Nahraj a roztřiď faktury znovu.' });
+    }
+
+    const subject = await generateSubjectForSingleFile(record);
+    record.subject = subject;
+    return res.json({ ok: true, id: record.id, subject });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: error.message || 'Neočekávaná chyba.' });
   }
 });
 

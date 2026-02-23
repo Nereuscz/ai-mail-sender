@@ -152,6 +152,26 @@
         font-size: 0.9rem;
       }
 
+      .subject-editor {
+        margin-top: 6px;
+      }
+
+      .item-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .subject-btn {
+        border: 1px solid #93c5fd;
+        background: #eff6ff;
+        color: #1d4ed8;
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-size: 0.88rem;
+        width: auto;
+      }
+
       .send-btn {
         border: 0;
         background: #2563eb;
@@ -256,10 +276,45 @@
 
             const subject = document.createElement('div');
             subject.className = 'subject';
-            subject.textContent = `Předmět: ${file.subject}`;
+            subject.textContent = 'Předmět:';
+
+            const subjectInput = document.createElement('input');
+            subjectInput.type = 'text';
+            subjectInput.maxLength = 120;
+            subjectInput.value = file.subject || '';
+            subjectInput.className = 'subject-editor';
 
             meta.appendChild(fileName);
             meta.appendChild(subject);
+            meta.appendChild(subjectInput);
+
+            const actions = document.createElement('div');
+            actions.className = 'item-actions';
+
+            const subjectBtn = document.createElement('button');
+            subjectBtn.type = 'button';
+            subjectBtn.className = 'subject-btn';
+            subjectBtn.textContent = 'AI předmět';
+            subjectBtn.addEventListener('click', async () => {
+              const original = subjectBtn.textContent;
+              subjectBtn.disabled = true;
+              subjectBtn.textContent = 'Generuji...';
+              try {
+                const response = await fetch(`/api/subject/${encodeURIComponent(file.id)}`, {
+                  method: 'POST',
+                });
+                const data = await parseApiResponse(response);
+                if (!response.ok) {
+                  throw new Error(data.error || 'Generování předmětu selhalo');
+                }
+                subjectInput.value = data.subject || subjectInput.value;
+              } catch (err) {
+                showResult(err.message || 'Neočekávaná chyba při generování předmětu.', true);
+              } finally {
+                subjectBtn.disabled = false;
+                subjectBtn.textContent = original;
+              }
+            });
 
             const sendBtn = document.createElement('button');
             sendBtn.type = 'button';
@@ -272,6 +327,8 @@
               try {
                 const response = await fetch(`/api/send/${encodeURIComponent(file.id)}`, {
                   method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ subject: subjectInput.value || '' }),
                 });
                 const data = await parseApiResponse(response);
                 if (!response.ok) {
@@ -287,7 +344,9 @@
             });
 
             row.appendChild(meta);
-            row.appendChild(sendBtn);
+            actions.appendChild(subjectBtn);
+            actions.appendChild(sendBtn);
+            row.appendChild(actions);
             section.appendChild(row);
           }
 

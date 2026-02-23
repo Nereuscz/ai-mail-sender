@@ -4,6 +4,7 @@ Jednoduchá webová aplikace:
 - nahraješ jednu nebo více příloh (PDF/obrázky),
 - AI je roztřídí podle firmy,
 - AI navrhne předmět pro každý soubor,
+- předmět můžeš u každého souboru ručně upravit nebo nechat znovu vygenerovat AI,
 - každý soubor odešleš jedním kliknutím na `faktury.jic@inbox.grit.cz`.
 
 ## 1) Instalace
