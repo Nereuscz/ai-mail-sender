@@ -5,6 +5,7 @@ Jednoduchá webová aplikace:
 - AI je roztřídí podle firmy,
 - AI navrhne předmět pro každý soubor,
 - předmět můžeš u každého souboru ručně upravit nebo nechat znovu vygenerovat AI,
+- můžeš vybrat více souborů a poslat je jedním e-mailem se společným předmětem,
 - každý soubor odešleš jedním kliknutím na `faktury.jic@inbox.grit.cz`.
 
 ## 1) Instalace

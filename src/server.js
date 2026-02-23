@@ -332,6 +332,51 @@ async function sendInvoiceViaGraph(accessToken, record) {
   }
 }
 
+async function sendInvoicesBatchViaGraph(accessToken, records, subjectInput) {
+  const subject = String(subjectInput || '').trim().slice(0, 120)
+    || `Faktury (${records.length})`;
+
+  const payload = {
+    message: {
+      subject,
+      body: {
+        contentType: 'Text',
+        content: 'Automaticky odesláno z AI Třídiče faktur.',
+      },
+      toRecipients: [
+        {
+          emailAddress: {
+            address: FIXED_TARGET_EMAIL,
+          },
+        },
+      ],
+      attachments: records.map((record) => ({
+        '@odata.type': '#microsoft.graph.fileAttachment',
+        name: record.filename,
+        contentType: record.mimetype || 'application/octet-stream',
+        contentBytes: record.contentBase64,
+      })),
+    },
+    saveToSentItems: true,
+  };
+
+  const response = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Hromadné odeslání selhalo: ${text}`);
+  }
+
+  return subject;
+}
+
 app.set('trust proxy', 1);
 app.use(express.json());
 app.use(session({
@@ -488,6 +533,36 @@ app.post('/api/send/:id', async (req, res) => {
       to: FIXED_TARGET_EMAIL,
       filename: record.filename,
       subject: record.subject,
+    });
+  } catch (error) {
+    console.error(error);
+    const status = String(error.message || '').includes('Nejsi přihlášený') ? 401 : 500;
+    return res.status(status).json({ error: error.message || 'Neočekávaná chyba.' });
+  }
+});
+
+app.post('/api/send-batch', async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
+    const commonSubject = String(req.body?.subject || '');
+    if (ids.length === 0) {
+      return res.status(400).json({ error: 'Vyber aspoň jeden soubor.' });
+    }
+
+    const records = req.session?.sortedInvoices || [];
+    const selected = records.filter((item) => ids.includes(item.id));
+    if (selected.length === 0) {
+      return res.status(404).json({ error: 'Vybrané soubory nebyly nalezeny. Nahraj a roztřiď faktury znovu.' });
+    }
+
+    const accessToken = await getValidAccessToken(req);
+    const usedSubject = await sendInvoicesBatchViaGraph(accessToken, selected, commonSubject);
+
+    return res.json({
+      ok: true,
+      count: selected.length,
+      to: FIXED_TARGET_EMAIL,
+      subject: usedSubject,
     });
   } catch (error) {
     console.error(error);

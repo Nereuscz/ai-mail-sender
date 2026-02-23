@@ -117,6 +117,12 @@
         gap: 14px;
       }
 
+      .batch-controls {
+        margin-top: 16px;
+        display: grid;
+        gap: 10px;
+      }
+
       .group {
         border: 1px solid #dbe3ff;
         border-radius: 12px;
@@ -131,7 +137,7 @@
       .item {
         display: grid;
         gap: 8px;
-        grid-template-columns: 1fr auto;
+        grid-template-columns: auto 1fr auto;
         align-items: center;
         border-top: 1px solid #e7ecff;
         padding: 10px 0;
@@ -162,6 +168,10 @@
         align-items: center;
       }
 
+      .item-check {
+        width: auto;
+      }
+
       .subject-btn {
         border: 1px solid #93c5fd;
         background: #eff6ff;
@@ -189,7 +199,7 @@
 
       @media (max-width: 640px) {
         .item {
-          grid-template-columns: 1fr;
+          grid-template-columns: auto 1fr;
         }
       }
     </style>
@@ -218,6 +228,14 @@
         Po roztřídění můžeš každý soubor jedním kliknutím odeslat na faktury.jic@inbox.grit.cz.
       </div>
 
+      <div class="batch-controls">
+        <div>
+          <label for="commonSubject">Společný předmět pro vybrané soubory</label>
+          <input id="commonSubject" type="text" maxlength="120" placeholder="Např. Faktury únor 2026" />
+        </div>
+        <button id="sendSelectedBtn" type="button" disabled>Odeslat vybrané na faktury</button>
+      </div>
+
       <div id="result" class="result" style="display:none;"></div>
       <div id="groups" class="groups"></div>
     </main>
@@ -231,6 +249,8 @@
       const logoutBtn = document.getElementById('logoutBtn');
       const authStatus = document.getElementById('authStatus');
       const filesInput = document.getElementById('files');
+      const commonSubjectInput = document.getElementById('commonSubject');
+      const sendSelectedBtn = document.getElementById('sendSelectedBtn');
       let isLoggedIn = false;
 
       function showResult(text, isError = false) {
@@ -268,6 +288,11 @@
           for (const file of group.files) {
             const row = document.createElement('div');
             row.className = 'item';
+
+            const check = document.createElement('input');
+            check.type = 'checkbox';
+            check.className = 'item-check';
+            check.dataset.fileId = file.id;
 
             const meta = document.createElement('div');
             const fileName = document.createElement('div');
@@ -343,15 +368,23 @@
               }
             });
 
-            row.appendChild(meta);
             actions.appendChild(subjectBtn);
             actions.appendChild(sendBtn);
+            row.appendChild(check);
+            row.appendChild(meta);
             row.appendChild(actions);
             section.appendChild(row);
           }
 
           groupsEl.appendChild(section);
         }
+        sendSelectedBtn.disabled = !isLoggedIn;
+      }
+
+      function selectedFileIds() {
+        return Array.from(document.querySelectorAll('.item-check:checked'))
+          .map((el) => el.dataset.fileId)
+          .filter(Boolean);
       }
 
       function updateAuthUi(status) {
@@ -370,6 +403,7 @@
           loginBtn.style.display = 'inline-block';
           logoutBtn.style.display = 'none';
         }
+        sendSelectedBtn.disabled = !isLoggedIn;
       }
 
       async function loadAuthStatus() {
@@ -390,6 +424,45 @@
         await fetch('/auth/logout', { method: 'POST' });
         updateAuthUi({ loggedIn: false });
         groupsEl.innerHTML = '';
+        commonSubjectInput.value = '';
+      });
+
+      sendSelectedBtn.addEventListener('click', async () => {
+        if (!isLoggedIn) {
+          showResult('Nejdřív se přihlas přes Microsoft.', true);
+          return;
+        }
+
+        const ids = selectedFileIds();
+        if (ids.length === 0) {
+          showResult('Vyber aspoň jeden soubor k hromadnému odeslání.', true);
+          return;
+        }
+
+        const original = sendSelectedBtn.textContent;
+        sendSelectedBtn.disabled = true;
+        sendSelectedBtn.textContent = 'Odesílám vybrané...';
+
+        try {
+          const response = await fetch('/api/send-batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ids,
+              subject: commonSubjectInput.value || '',
+            }),
+          });
+          const data = await parseApiResponse(response);
+          if (!response.ok) {
+            throw new Error(data.error || 'Hromadné odeslání selhalo');
+          }
+          showResult(`Odesláno souborů: ${data.count} -> ${data.to}\nPředmět: ${data.subject}`);
+        } catch (err) {
+          showResult(err.message || 'Neočekávaná chyba při hromadném odeslání.', true);
+        } finally {
+          sendSelectedBtn.disabled = !isLoggedIn;
+          sendSelectedBtn.textContent = original;
+        }
       });
 
       form.addEventListener('submit', async (e) => {
