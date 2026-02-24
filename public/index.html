@@ -239,6 +239,92 @@
         font-size: 0.9rem;
       }
 
+      .drop-zone {
+        border: 2px dashed var(--line);
+        border-radius: 16px;
+        padding: 32px 20px;
+        text-align: center;
+        cursor: pointer;
+        transition: 200ms ease;
+        background: rgba(255, 255, 255, 0.4);
+      }
+
+      .drop-zone:hover {
+        border-color: rgba(10, 132, 255, 0.4);
+        background: rgba(10, 132, 255, 0.04);
+      }
+
+      .drop-zone.dragover {
+        border-color: var(--accent);
+        background: rgba(10, 132, 255, 0.08);
+        transform: scale(1.01);
+      }
+
+      .drop-zone-icon {
+        font-size: 2rem;
+        margin-bottom: 8px;
+      }
+
+      .drop-zone-text {
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.5;
+      }
+
+      .drop-zone-text strong {
+        color: var(--accent);
+      }
+
+      .drop-zone-files {
+        margin-top: 10px;
+        font-size: 0.85rem;
+        color: var(--text);
+        font-weight: 600;
+      }
+
+      .file-count {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 999px;
+        background: rgba(10, 132, 255, 0.12);
+        color: var(--accent-strong);
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin-top: 14px;
+      }
+
+      .select-all-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 0;
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: var(--muted);
+      }
+
+      .select-all-row input {
+        width: auto;
+      }
+
+      .item.sent {
+        background: var(--ok-bg);
+        border-radius: 12px;
+        padding: 10px 8px;
+        margin: 4px -8px;
+      }
+
+      .sent-badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 999px;
+        background: var(--ok-bg);
+        color: var(--ok-text);
+        font-size: 0.78rem;
+        font-weight: 600;
+        margin-left: 8px;
+      }
+
       @media (max-width: 640px) {
         .item {
           grid-template-columns: auto 1fr;
@@ -262,19 +348,29 @@
       </div>
 
       <form id="sort-form">
-        <div>
-          <label for="files">Faktury (PDF nebo obrázky)</label>
-          <input id="files" name="files" type="file" accept="application/pdf,image/*" multiple required />
+        <input id="files" name="files" type="file" accept="application/pdf,image/*" multiple required style="display:none;" />
+
+        <div id="dropZone" class="drop-zone">
+          <div class="drop-zone-icon">&#128193;</div>
+          <div class="drop-zone-text">
+            Přetáhni faktury sem nebo <strong>klikni pro výběr</strong><br>
+            PDF a obrázky &middot; můžeš nahrávat postupně z různých složek
+          </div>
+          <div id="dropZoneFiles" class="drop-zone-files"></div>
         </div>
 
         <button id="sortBtn" type="submit">Přidat a roztřídit faktury</button>
       </form>
 
-      <div class="muted" style="margin-top:10px;">
-        Soubory z různých složek můžeš nahrávat postupně – nové se přidají k existujícím. Pro vymazání všech použij tlačítko „Smazat vše".
+      <div id="result" class="result" style="display:none;"></div>
+
+      <div id="fileCount" class="file-count" style="display:none;"></div>
+
+      <div id="selectAllRow" class="select-all-row" style="display:none;">
+        <input type="checkbox" id="selectAll" />
+        <label for="selectAll">Vybrat vše</label>
       </div>
 
-      <div id="result" class="result" style="display:none;"></div>
       <div id="groups" class="groups"></div>
 
       <div id="clearAllWrap" style="display:none; margin-top:14px;">
@@ -302,13 +398,19 @@
       const logoutBtn = document.getElementById('logoutBtn');
       const authStatus = document.getElementById('authStatus');
       const filesInput = document.getElementById('files');
+      const dropZone = document.getElementById('dropZone');
+      const dropZoneFiles = document.getElementById('dropZoneFiles');
       const commonSubjectInput = document.getElementById('commonSubject');
       const sendSelectedBtn = document.getElementById('sendSelectedBtn');
       const removeSelectedBtn = document.getElementById('removeSelectedBtn');
       const batchControls = document.getElementById('batchControls');
       const clearAllBtn = document.getElementById('clearAllBtn');
       const clearAllWrap = document.getElementById('clearAllWrap');
+      const fileCountEl = document.getElementById('fileCount');
+      const selectAllRow = document.getElementById('selectAllRow');
+      const selectAllCb = document.getElementById('selectAll');
       let isLoggedIn = false;
+      const sentIds = new Set();
 
       function showResult(text, isError = false) {
         result.textContent = text;
@@ -332,9 +434,39 @@
         }
       }
 
+      function updateFileCount(total) {
+        if (total > 0) {
+          fileCountEl.textContent = `${total} ${total === 1 ? 'faktura' : total < 5 ? 'faktury' : 'faktur'} v seznamu`;
+          fileCountEl.style.display = 'inline-block';
+        } else {
+          fileCountEl.style.display = 'none';
+        }
+      }
+
+      function updateSelectAll() {
+        const all = document.querySelectorAll('.item-check');
+        const checked = document.querySelectorAll('.item-check:checked');
+        selectAllCb.checked = all.length > 0 && checked.length === all.length;
+        selectAllCb.indeterminate = checked.length > 0 && checked.length < all.length;
+      }
+
+      function markAsSent(fileId, row) {
+        sentIds.add(fileId);
+        row.classList.add('sent');
+        const nameEl = row.querySelector('.file-name');
+        if (nameEl && !nameEl.querySelector('.sent-badge')) {
+          const badge = document.createElement('span');
+          badge.className = 'sent-badge';
+          badge.textContent = 'Odesláno';
+          nameEl.appendChild(badge);
+        }
+      }
+
       function renderGroups(groups) {
         groupsEl.innerHTML = '';
         batchControls.style.display = 'none';
+        let totalFiles = 0;
+
         for (const group of groups) {
           const section = document.createElement('section');
           section.className = 'group';
@@ -344,18 +476,32 @@
           section.appendChild(heading);
 
           for (const file of group.files) {
+            totalFiles++;
             const row = document.createElement('div');
             row.className = 'item';
+            row.dataset.fileId = file.id;
+
+            if (sentIds.has(file.id)) {
+              row.classList.add('sent');
+            }
 
             const check = document.createElement('input');
             check.type = 'checkbox';
             check.className = 'item-check';
             check.dataset.fileId = file.id;
+            check.addEventListener('change', updateSelectAll);
 
             const meta = document.createElement('div');
             const fileName = document.createElement('div');
             fileName.className = 'file-name';
             fileName.textContent = file.filename;
+
+            if (sentIds.has(file.id)) {
+              const badge = document.createElement('span');
+              badge.className = 'sent-badge';
+              badge.textContent = 'Odesláno';
+              fileName.appendChild(badge);
+            }
 
             const subject = document.createElement('div');
             subject.className = 'subject';
@@ -417,7 +563,8 @@
                 if (!response.ok) {
                   throw new Error(data.error || 'Odeslání selhalo');
                 }
-                showResult(`Odesláno: ${data.filename} -> ${data.to}\\nPředmět: ${data.subject}`);
+                markAsSent(file.id, row);
+                showResult(`Odesláno: ${data.filename} \u2192 ${data.to}\nPředmět: ${data.subject}`);
               } catch (err) {
                 showResult(err.message || 'Neočekávaná chyba při odeslání.', true);
               } finally {
@@ -436,11 +583,16 @@
 
           groupsEl.appendChild(section);
         }
+
         const hasGroups = groups.length > 0;
         batchControls.style.display = hasGroups ? 'grid' : 'none';
         clearAllWrap.style.display = hasGroups ? 'block' : 'none';
+        selectAllRow.style.display = hasGroups ? 'flex' : 'none';
+        selectAllCb.checked = false;
+        selectAllCb.indeterminate = false;
         sendSelectedBtn.disabled = !isLoggedIn;
         removeSelectedBtn.disabled = !isLoggedIn;
+        updateFileCount(totalFiles);
       }
 
       function selectedFileIds() {
@@ -448,6 +600,11 @@
           .map((el) => el.dataset.fileId)
           .filter(Boolean);
       }
+
+      selectAllCb.addEventListener('change', () => {
+        const checked = selectAllCb.checked;
+        document.querySelectorAll('.item-check').forEach((cb) => { cb.checked = checked; });
+      });
 
       function updateAuthUi(status) {
         isLoggedIn = !!status.loggedIn;
@@ -479,6 +636,44 @@
         }
       }
 
+      /* ---- Drag & Drop ---- */
+      function updateDropZoneLabel(files) {
+        if (files && files.length > 0) {
+          const names = Array.from(files).map((f) => f.name);
+          dropZoneFiles.textContent = names.length <= 4
+            ? names.join(', ')
+            : `${names.slice(0, 3).join(', ')} a dalších ${names.length - 3}`;
+        } else {
+          dropZoneFiles.textContent = '';
+        }
+      }
+
+      dropZone.addEventListener('click', () => filesInput.click());
+
+      filesInput.addEventListener('change', () => {
+        updateDropZoneLabel(filesInput.files);
+      });
+
+      dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+      });
+
+      dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('dragover');
+      });
+
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        const dt = e.dataTransfer;
+        if (dt.files && dt.files.length > 0) {
+          filesInput.files = dt.files;
+          updateDropZoneLabel(dt.files);
+        }
+      });
+
+      /* ---- Auth ---- */
       loginBtn.addEventListener('click', () => {
         window.location.href = '/auth/login';
       });
@@ -489,8 +684,13 @@
         groupsEl.innerHTML = '';
         commonSubjectInput.value = '';
         batchControls.style.display = 'none';
+        clearAllWrap.style.display = 'none';
+        selectAllRow.style.display = 'none';
+        fileCountEl.style.display = 'none';
+        sentIds.clear();
       });
 
+      /* ---- Batch actions ---- */
       removeSelectedBtn.addEventListener('click', async () => {
         if (!isLoggedIn) {
           showResult('Nejdřív se přihlas přes Microsoft.', true);
@@ -517,6 +717,7 @@
           if (!response.ok) {
             throw new Error(data.error || 'Odebrání selhalo');
           }
+          for (const id of ids) sentIds.delete(id);
           renderGroups(data.groups || []);
           showResult(`Odebráno: ${data.removed}. Celkem v seznamu: ${data.total}.`);
         } catch (err) {
@@ -542,9 +743,12 @@
           if (!response.ok) {
             throw new Error(data.error || 'Smazání selhalo');
           }
+          sentIds.clear();
           groupsEl.innerHTML = '';
           batchControls.style.display = 'none';
           clearAllWrap.style.display = 'none';
+          selectAllRow.style.display = 'none';
+          fileCountEl.style.display = 'none';
           commonSubjectInput.value = '';
           result.style.display = 'none';
         } catch (err) {
@@ -584,7 +788,11 @@
           if (!response.ok) {
             throw new Error(data.error || 'Hromadné odeslání selhalo');
           }
-          showResult(`Odesláno souborů: ${data.count} -> ${data.to}\nPředmět: ${data.subject}`);
+          for (const id of ids) {
+            const row = document.querySelector(`.item[data-file-id="${id}"]`);
+            if (row) markAsSent(id, row);
+          }
+          showResult(`Odesláno souborů: ${data.count} \u2192 ${data.to}\nPředmět: ${data.subject}`);
         } catch (err) {
           showResult(err.message || 'Neočekávaná chyba při hromadném odeslání.', true);
         } finally {
@@ -593,6 +801,7 @@
         }
       });
 
+      /* ---- Upload & sort ---- */
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
         result.style.display = 'none';
@@ -629,10 +838,15 @@
           }
 
           renderGroups(data.groups || []);
+          filesInput.value = '';
+          updateDropZoneLabel(null);
           showResult(`Hotovo. Přidáno: ${data.added ?? 0}. Celkem v seznamu: ${data.total}.`);
         } catch (err) {
           groupsEl.innerHTML = '';
           batchControls.style.display = 'none';
+          clearAllWrap.style.display = 'none';
+          selectAllRow.style.display = 'none';
+          fileCountEl.style.display = 'none';
           showResult(err.message || 'Neočekávaná chyba.', true);
         } finally {
           sortBtn.disabled = !isLoggedIn;
