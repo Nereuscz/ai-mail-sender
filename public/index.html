@@ -163,7 +163,46 @@
       }
 
       .group h3 {
-        margin: 0 0 10px;
+        margin: 0 0 6px;
+      }
+
+      .group-header {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+      }
+
+      .group-header input {
+        flex: 1;
+        min-width: 180px;
+        font-size: 0.88rem;
+        padding: 8px 12px;
+        border-radius: 10px;
+      }
+
+      .group-send-btn {
+        border: 0;
+        background: var(--accent);
+        color: #fff;
+        border-radius: 10px;
+        padding: 8px 16px;
+        font-size: 0.88rem;
+        font-weight: 600;
+        width: auto;
+        white-space: nowrap;
+      }
+
+      .group.group-sent {
+        border-color: rgba(52, 199, 89, 0.4);
+        background: rgba(52, 199, 89, 0.06);
+      }
+
+      .group-sent-label {
+        font-size: 0.85rem;
+        color: var(--ok-text);
+        font-weight: 600;
       }
 
       .item {
@@ -493,6 +532,17 @@
         }
       }
 
+      function markGroupSent(section, groupSendBtn, groupSubjectInput) {
+        section.classList.add('group-sent');
+        groupSendBtn.disabled = true;
+        groupSendBtn.textContent = 'Odesláno';
+        groupSubjectInput.disabled = true;
+        section.querySelectorAll('.item').forEach((row) => {
+          const fid = row.dataset.fileId;
+          if (fid) markAsSent(fid, row);
+        });
+      }
+
       function renderGroups(groups) {
         groupsEl.innerHTML = '';
         batchControls.style.display = 'none';
@@ -501,10 +551,59 @@
         for (const group of groups) {
           const section = document.createElement('section');
           section.className = 'group';
+          const allGroupSent = group.files.every((f) => sentIds.has(f.id));
+          if (allGroupSent) section.classList.add('group-sent');
 
           const heading = document.createElement('h3');
-          heading.textContent = group.company;
+          heading.textContent = `${group.company} (${group.files.length})`;
           section.appendChild(heading);
+
+          const groupHeader = document.createElement('div');
+          groupHeader.className = 'group-header';
+
+          const groupSubjectInput = document.createElement('input');
+          groupSubjectInput.type = 'text';
+          groupSubjectInput.maxLength = 120;
+          groupSubjectInput.placeholder = 'Předmět e-mailu pro skupinu';
+          groupSubjectInput.value = `Faktury \u2013 ${group.company}`;
+          if (allGroupSent) groupSubjectInput.disabled = true;
+
+          const groupSendBtn = document.createElement('button');
+          groupSendBtn.type = 'button';
+          groupSendBtn.className = 'group-send-btn';
+          groupSendBtn.textContent = allGroupSent ? 'Odesláno' : `Odeslat skupinu (${group.files.length})`;
+          groupSendBtn.disabled = !isLoggedIn || allGroupSent;
+
+          const groupFileIds = group.files.map((f) => f.id);
+          groupSendBtn.addEventListener('click', async () => {
+            const original = groupSendBtn.textContent;
+            groupSendBtn.disabled = true;
+            groupSendBtn.textContent = 'Odesílám...';
+            try {
+              const response = await fetch('/api/send-batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  ids: groupFileIds,
+                  subject: groupSubjectInput.value || '',
+                }),
+              });
+              const data = await parseApiResponse(response);
+              if (!response.ok) {
+                throw new Error(data.error || 'Odeslání skupiny selhalo');
+              }
+              markGroupSent(section, groupSendBtn, groupSubjectInput);
+              showResult(`Odesláno ${data.count} soubor\u016f (${group.company}) \u2192 ${data.to}\nPředmět: ${data.subject}`);
+            } catch (err) {
+              showResult(err.message || 'Neočekávaná chyba při odeslání skupiny.', true);
+              groupSendBtn.disabled = false;
+              groupSendBtn.textContent = original;
+            }
+          });
+
+          groupHeader.appendChild(groupSubjectInput);
+          groupHeader.appendChild(groupSendBtn);
+          section.appendChild(groupHeader);
 
           for (const file of group.files) {
             totalFiles++;
@@ -536,79 +635,13 @@
 
             const subject = document.createElement('div');
             subject.className = 'subject';
-            subject.textContent = 'Předmět:';
-
-            const subjectInput = document.createElement('input');
-            subjectInput.type = 'text';
-            subjectInput.maxLength = 120;
-            subjectInput.value = file.subject || '';
-            subjectInput.className = 'subject-editor';
+            subject.textContent = `Předmět: ${file.subject || ''}`;
 
             meta.appendChild(fileName);
             meta.appendChild(subject);
-            meta.appendChild(subjectInput);
 
-            const actions = document.createElement('div');
-            actions.className = 'item-actions';
-
-            const subjectBtn = document.createElement('button');
-            subjectBtn.type = 'button';
-            subjectBtn.className = 'subject-btn';
-            subjectBtn.textContent = 'AI předmět';
-            subjectBtn.addEventListener('click', async () => {
-              const original = subjectBtn.textContent;
-              subjectBtn.disabled = true;
-              subjectBtn.textContent = 'Generuji...';
-              try {
-                const response = await fetch(`/api/subject/${encodeURIComponent(file.id)}`, {
-                  method: 'POST',
-                });
-                const data = await parseApiResponse(response);
-                if (!response.ok) {
-                  throw new Error(data.error || 'Generování předmětu selhalo');
-                }
-                subjectInput.value = data.subject || subjectInput.value;
-              } catch (err) {
-                showResult(err.message || 'Neočekávaná chyba při generování předmětu.', true);
-              } finally {
-                subjectBtn.disabled = false;
-                subjectBtn.textContent = original;
-              }
-            });
-
-            const sendBtn = document.createElement('button');
-            sendBtn.type = 'button';
-            sendBtn.className = 'send-btn';
-            sendBtn.textContent = 'Odeslat na faktury';
-            sendBtn.addEventListener('click', async () => {
-              const original = sendBtn.textContent;
-              sendBtn.disabled = true;
-              sendBtn.textContent = 'Odesílám...';
-              try {
-                const response = await fetch(`/api/send/${encodeURIComponent(file.id)}`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ subject: subjectInput.value || '' }),
-                });
-                const data = await parseApiResponse(response);
-                if (!response.ok) {
-                  throw new Error(data.error || 'Odeslání selhalo');
-                }
-                markAsSent(file.id, row);
-                showResult(`Odesláno: ${data.filename} \u2192 ${data.to}\nPředmět: ${data.subject}`);
-              } catch (err) {
-                showResult(err.message || 'Neočekávaná chyba při odeslání.', true);
-              } finally {
-                sendBtn.disabled = false;
-                sendBtn.textContent = original;
-              }
-            });
-
-            actions.appendChild(subjectBtn);
-            actions.appendChild(sendBtn);
             row.appendChild(check);
             row.appendChild(meta);
-            row.appendChild(actions);
             section.appendChild(row);
           }
 
