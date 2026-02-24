@@ -14,10 +14,18 @@ const MAX_FILE_SIZE_MB = Number(process.env.MAX_FILE_SIZE_MB || 20);
 const MAX_FILES = Number(process.env.MAX_FILES || 10);
 const FIXED_TARGET_EMAIL = 'faktury.jic@inbox.grit.cz';
 
-function saveSession(req) {
-  return new Promise((resolve, reject) => {
-    req.session.save((err) => (err ? reject(err) : resolve()));
-  });
+const invoiceStore = new Map();
+
+function getInvoices(req) {
+  return invoiceStore.get(req.sessionID) || [];
+}
+
+function setInvoices(req, records) {
+  invoiceStore.set(req.sessionID, records);
+}
+
+function clearInvoices(req) {
+  invoiceStore.delete(req.sessionID);
 }
 
 function getMissingConfig() {
@@ -452,6 +460,7 @@ app.get('/auth/redirect', async (req, res) => {
 });
 
 app.post('/auth/logout', (req, res) => {
+  clearInvoices(req);
   req.session.destroy(() => {
     res.json({ ok: true });
   });
@@ -495,9 +504,9 @@ app.post('/api/sort', upload.array('files', MAX_FILES), async (req, res) => {
       size: files[index].size,
     }));
 
-    const existing = Array.isArray(req.session.sortedInvoices) ? req.session.sortedInvoices : [];
+    const existing = getInvoices(req);
     const records = [...existing, ...newRecords];
-    req.session.sortedInvoices = records;
+    setInvoices(req, records);
 
     const groups = buildGroupedResponse(records.map((r) => ({
       id: r.id,
@@ -507,7 +516,6 @@ app.post('/api/sort', upload.array('files', MAX_FILES), async (req, res) => {
       size: r.size,
     })));
 
-    await saveSession(req);
     return res.json({
       ok: true,
       added: newRecords.length,
@@ -523,7 +531,7 @@ app.post('/api/sort', upload.array('files', MAX_FILES), async (req, res) => {
 app.post('/api/send/:id', async (req, res) => {
   try {
     const fileId = String(req.params.id || '');
-    const records = req.session?.sortedInvoices || [];
+    const records = getInvoices(req);
     const record = records.find((item) => item.id === fileId);
 
     if (!record) {
@@ -559,7 +567,7 @@ app.post('/api/send-batch', async (req, res) => {
       return res.status(400).json({ error: 'Vyber aspoň jeden soubor.' });
     }
 
-    const records = req.session?.sortedInvoices || [];
+    const records = getInvoices(req);
     const selected = records.filter((item) => ids.includes(item.id));
     if (selected.length === 0) {
       return res.status(404).json({ error: 'Vybrané soubory nebyly nalezeny. Nahraj a roztřiď faktury znovu.' });
@@ -587,8 +595,7 @@ app.post('/api/clear-all', async (req, res) => {
       return res.status(401).json({ error: 'Nejdřív se přihlas přes Microsoft.' });
     }
 
-    req.session.sortedInvoices = [];
-    await saveSession(req);
+    clearInvoices(req);
     return res.json({ ok: true });
   } catch (error) {
     console.error(error);
@@ -607,11 +614,11 @@ app.post('/api/remove-batch', async (req, res) => {
       return res.status(400).json({ error: 'Vyber aspoň jeden soubor k odebrání.' });
     }
 
-    const records = Array.isArray(req.session.sortedInvoices) ? req.session.sortedInvoices : [];
+    const records = getInvoices(req);
     const idSet = new Set(ids);
     const remaining = records.filter((item) => !idSet.has(item.id));
     const removed = records.length - remaining.length;
-    req.session.sortedInvoices = remaining;
+    setInvoices(req, remaining);
 
     const groups = buildGroupedResponse(remaining.map((r) => ({
       id: r.id,
@@ -621,7 +628,6 @@ app.post('/api/remove-batch', async (req, res) => {
       size: r.size,
     })));
 
-    await saveSession(req);
     return res.json({
       ok: true,
       removed,
@@ -641,7 +647,7 @@ app.post('/api/subject/:id', async (req, res) => {
     }
 
     const fileId = String(req.params.id || '');
-    const records = req.session?.sortedInvoices || [];
+    const records = getInvoices(req);
     const record = records.find((item) => item.id === fileId);
 
     if (!record) {
@@ -650,7 +656,6 @@ app.post('/api/subject/:id', async (req, res) => {
 
     const subject = await generateSubjectForSingleFile(record);
     record.subject = subject;
-    await saveSession(req);
     return res.json({ ok: true, id: record.id, subject });
   } catch (error) {
     console.error(error);
