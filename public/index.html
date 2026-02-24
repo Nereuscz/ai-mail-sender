@@ -271,11 +271,15 @@
       </form>
 
       <div class="muted" style="margin-top:10px;">
-        Nové nahrané soubory se přidají k těm stávajícím. Po roztřídění můžeš každý soubor odeslat na faktury.jic@inbox.grit.cz.
+        Soubory z různých složek můžeš nahrávat postupně – nové se přidají k existujícím. Pro vymazání všech použij tlačítko „Smazat vše".
       </div>
 
       <div id="result" class="result" style="display:none;"></div>
       <div id="groups" class="groups"></div>
+
+      <div id="clearAllWrap" style="display:none; margin-top:14px;">
+        <button id="clearAllBtn" type="button" class="remove-btn" style="width:auto;">Smazat vše</button>
+      </div>
 
       <div id="batchControls" class="batch-controls" style="display:none;">
         <div>
@@ -302,6 +306,8 @@
       const sendSelectedBtn = document.getElementById('sendSelectedBtn');
       const removeSelectedBtn = document.getElementById('removeSelectedBtn');
       const batchControls = document.getElementById('batchControls');
+      const clearAllBtn = document.getElementById('clearAllBtn');
+      const clearAllWrap = document.getElementById('clearAllWrap');
       let isLoggedIn = false;
 
       function showResult(text, isError = false) {
@@ -430,9 +436,9 @@
 
           groupsEl.appendChild(section);
         }
-        if (groups.length > 0) {
-          batchControls.style.display = 'grid';
-        }
+        const hasGroups = groups.length > 0;
+        batchControls.style.display = hasGroups ? 'grid' : 'none';
+        clearAllWrap.style.display = hasGroups ? 'block' : 'none';
         sendSelectedBtn.disabled = !isLoggedIn;
         removeSelectedBtn.disabled = !isLoggedIn;
       }
@@ -518,6 +524,34 @@
         } finally {
           removeSelectedBtn.disabled = !isLoggedIn;
           removeSelectedBtn.textContent = original;
+        }
+      });
+
+      clearAllBtn.addEventListener('click', async () => {
+        if (!isLoggedIn) {
+          showResult('Nejdřív se přihlas přes Microsoft.', true);
+          return;
+        }
+
+        clearAllBtn.disabled = true;
+        clearAllBtn.textContent = 'Mažu...';
+
+        try {
+          const response = await fetch('/api/clear-all', { method: 'POST' });
+          const data = await parseApiResponse(response);
+          if (!response.ok) {
+            throw new Error(data.error || 'Smazání selhalo');
+          }
+          groupsEl.innerHTML = '';
+          batchControls.style.display = 'none';
+          clearAllWrap.style.display = 'none';
+          commonSubjectInput.value = '';
+          result.style.display = 'none';
+        } catch (err) {
+          showResult(err.message || 'Neočekávaná chyba při mazání.', true);
+        } finally {
+          clearAllBtn.disabled = false;
+          clearAllBtn.textContent = 'Smazat vše';
         }
       });
 

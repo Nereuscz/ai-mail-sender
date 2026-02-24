@@ -574,6 +574,20 @@ app.post('/api/send-batch', async (req, res) => {
   }
 });
 
+app.post('/api/clear-all', (req, res) => {
+  try {
+    if (!req.session?.auth?.userEmail) {
+      return res.status(401).json({ error: 'Nejdřív se přihlas přes Microsoft.' });
+    }
+
+    req.session.sortedInvoices = [];
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: error.message || 'Neočekávaná chyba.' });
+  }
+});
+
 app.post('/api/remove-batch', (req, res) => {
   try {
     if (!req.session?.auth?.userEmail) {
