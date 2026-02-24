@@ -640,8 +640,42 @@
             meta.appendChild(fileName);
             meta.appendChild(subject);
 
+            const actions = document.createElement('div');
+            actions.className = 'item-actions';
+
+            const fileSendBtn = document.createElement('button');
+            fileSendBtn.type = 'button';
+            fileSendBtn.className = 'send-btn';
+            fileSendBtn.textContent = sentIds.has(file.id) ? 'Odesláno' : 'Odeslat';
+            fileSendBtn.disabled = !isLoggedIn || sentIds.has(file.id);
+            fileSendBtn.addEventListener('click', async () => {
+              const original = fileSendBtn.textContent;
+              fileSendBtn.disabled = true;
+              fileSendBtn.textContent = 'Odesílám...';
+              try {
+                const response = await fetch(`/api/send/${encodeURIComponent(file.id)}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ subject: file.subject || '' }),
+                });
+                const data = await parseApiResponse(response);
+                if (!response.ok) {
+                  throw new Error(data.error || 'Odeslání selhalo');
+                }
+                markAsSent(file.id, row);
+                fileSendBtn.textContent = 'Odesláno';
+                showResult(`Odesláno: ${data.filename} \u2192 ${data.to}\nPředmět: ${data.subject}`);
+              } catch (err) {
+                showResult(err.message || 'Neočekávaná chyba při odeslání.', true);
+                fileSendBtn.disabled = false;
+                fileSendBtn.textContent = original;
+              }
+            });
+            actions.appendChild(fileSendBtn);
+
             row.appendChild(check);
             row.appendChild(meta);
+            row.appendChild(actions);
             section.appendChild(row);
           }
 
