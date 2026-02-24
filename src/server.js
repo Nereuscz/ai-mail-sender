@@ -16,16 +16,24 @@ const FIXED_TARGET_EMAIL = 'faktury.jic@inbox.grit.cz';
 
 const invoiceStore = new Map();
 
+function storageKey(req) {
+  if (!req.session.storageKey) {
+    req.session.storageKey = crypto.randomUUID();
+  }
+  return req.session.storageKey;
+}
+
 function getInvoices(req) {
-  return invoiceStore.get(req.sessionID) || [];
+  return invoiceStore.get(storageKey(req)) || [];
 }
 
 function setInvoices(req, records) {
-  invoiceStore.set(req.sessionID, records);
+  invoiceStore.set(storageKey(req), records);
 }
 
 function clearInvoices(req) {
-  invoiceStore.delete(req.sessionID);
+  const key = req.session.storageKey;
+  if (key) invoiceStore.delete(key);
 }
 
 function getMissingConfig() {
@@ -504,7 +512,10 @@ app.post('/api/sort', upload.array('files', MAX_FILES), async (req, res) => {
       size: files[index].size,
     }));
 
+    const key = storageKey(req);
     const existing = getInvoices(req);
+    console.log(`[sort] storageKey=${key}, sessionID=${req.sessionID}, existing=${existing.length}, new=${newRecords.length}`);
+
     const records = [...existing, ...newRecords];
     setInvoices(req, records);
 
