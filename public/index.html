@@ -278,7 +278,10 @@
       <div id="groups" class="groups"></div>
 
       <div id="clearAllWrap" style="display:none; margin-top:14px;">
-        <button id="clearAllBtn" type="button" class="remove-btn" style="width:auto;">Smazat vše</button>
+        <div class="batch-actions">
+          <button id="removeSelectedBtn" class="remove-btn" type="button" disabled>Odebrat vybrané</button>
+          <button id="clearAllBtn" type="button" class="remove-btn" style="width:auto;">Smazat vše</button>
+        </div>
       </div>
 
       <div id="batchControls" class="batch-controls" style="display:none;">
@@ -286,10 +289,7 @@
           <label for="commonSubject">Společný předmět pro vybrané soubory</label>
           <input id="commonSubject" type="text" maxlength="120" placeholder="Např. Faktury únor 2026" />
         </div>
-        <div class="batch-actions">
-          <button id="sendSelectedBtn" type="button" disabled>Odeslat vybrané na faktury</button>
-          <button id="removeSelectedBtn" class="remove-btn" type="button" disabled>Odebrat vybrané</button>
-        </div>
+        <button id="sendSelectedBtn" type="button" disabled>Odeslat vybrané na faktury</button>
       </div>
     </main>
 

@@ -14,6 +14,12 @@ const MAX_FILE_SIZE_MB = Number(process.env.MAX_FILE_SIZE_MB || 20);
 const MAX_FILES = Number(process.env.MAX_FILES || 10);
 const FIXED_TARGET_EMAIL = 'faktury.jic@inbox.grit.cz';
 
+function saveSession(req) {
+  return new Promise((resolve, reject) => {
+    req.session.save((err) => (err ? reject(err) : resolve()));
+  });
+}
+
 function getMissingConfig() {
   const required = [
     'OPENAI_API_KEY',
@@ -501,6 +507,7 @@ app.post('/api/sort', upload.array('files', MAX_FILES), async (req, res) => {
       size: r.size,
     })));
 
+    await saveSession(req);
     return res.json({
       ok: true,
       added: newRecords.length,
@@ -574,13 +581,14 @@ app.post('/api/send-batch', async (req, res) => {
   }
 });
 
-app.post('/api/clear-all', (req, res) => {
+app.post('/api/clear-all', async (req, res) => {
   try {
     if (!req.session?.auth?.userEmail) {
       return res.status(401).json({ error: 'Nejdřív se přihlas přes Microsoft.' });
     }
 
     req.session.sortedInvoices = [];
+    await saveSession(req);
     return res.json({ ok: true });
   } catch (error) {
     console.error(error);
@@ -588,7 +596,7 @@ app.post('/api/clear-all', (req, res) => {
   }
 });
 
-app.post('/api/remove-batch', (req, res) => {
+app.post('/api/remove-batch', async (req, res) => {
   try {
     if (!req.session?.auth?.userEmail) {
       return res.status(401).json({ error: 'Nejdřív se přihlas přes Microsoft.' });
@@ -613,6 +621,7 @@ app.post('/api/remove-batch', (req, res) => {
       size: r.size,
     })));
 
+    await saveSession(req);
     return res.json({
       ok: true,
       removed,
@@ -641,6 +650,7 @@ app.post('/api/subject/:id', async (req, res) => {
 
     const subject = await generateSubjectForSingleFile(record);
     record.subject = subject;
+    await saveSession(req);
     return res.json({ ok: true, id: record.id, subject });
   } catch (error) {
     console.error(error);
